@@ -47,7 +47,9 @@ export default function QuestionDisplay() {
 
         try {
             const responseTime = 30 - timeLeft;
-            const result = await submitAnswer(question.id, selectedAnswer || '', responseTime);
+            // Konwertuj literę na pełny tekst odpowiedzi
+            const answerText = selectedAnswer ? question[`option_${selectedAnswer.toLowerCase()}`] : '';
+            const result = await submitAnswer(question.id, answerText, responseTime);
             setFeedback(result);
 
             setTimeout(() => {
@@ -108,7 +110,7 @@ export default function QuestionDisplay() {
                         {['A', 'B', 'C', 'D'].map((option) => {
                             const optionText = question[`option_${option.toLowerCase()}`];
                             const isSelected = selectedAnswer === option;
-                            const isCorrect = feedback && option === feedback.correct_answer;
+                            const isCorrect = feedback && optionText === feedback.correct_answer;
                             const isWrong = feedback && selectedAnswer === option && !feedback.is_correct;
 
                             return (
