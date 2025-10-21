@@ -16,6 +16,12 @@ class QuizSession(models.Model):
 
     class Meta:
         ordering = ['-started_at']
+        verbose_name = 'Quiz Session'
+        verbose_name_plural = 'Quiz Sessions'
+        indexes = [
+            models.Index(fields=['-started_at']),
+            models.Index(fields=['user', 'is_completed']),
+        ]
 
     def __str__(self):
         return f'{self.user.email} - {self.topic}'
@@ -39,6 +45,14 @@ class Question(models.Model):
     embedding_vector = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'Question'
+        verbose_name_plural = 'Questions'
+        indexes = [
+            models.Index(fields=['session', 'created_at']),
+        ]
+
     def __str__(self):
         return f'Q{self.id}: {self.question_text[:50]}'
 
@@ -50,6 +64,15 @@ class Answer(models.Model):
     is_correct = models.BooleanField()
     response_time = models.FloatField()
     answered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-answered_at']
+        verbose_name = 'Answer'
+        verbose_name_plural = 'Answers'
+        indexes = [
+            models.Index(fields=['question', 'user']),
+            models.Index(fields=['-answered_at']),
+        ]
 
     def __str__(self):
         return f"{self.user.email} - {'✓' if self.is_correct else '✗'}"
