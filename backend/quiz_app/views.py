@@ -85,8 +85,9 @@ def get_question(request, session_id):
     ]
     random.shuffle(answers)
 
-    session.total_questions += 1
-    session.save()
+    # Don't increment total_questions here - do it in submit_answer
+    # This prevents double-counting if the question is fetched multiple times
+    # (e.g., due to React StrictMode in development)
 
     # Map answers to option letters A, B, C, D
     option_mapping = {}
@@ -104,7 +105,7 @@ def get_question(request, session_id):
         'option_c': answers[2],
         'option_d': answers[3],
         'current_difficulty': session.current_difficulty,
-        'question_number': session.total_questions
+        'question_number': session.total_questions + 1  # Next question number
     })
 
 
@@ -124,6 +125,23 @@ def submit_answer(request):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    # Check if user already answered this question (prevent duplicate submissions)
+    existing_answer = Answer.objects.filter(question=question, user=request.user).first()
+    if existing_answer:
+        # Return the existing answer instead of creating duplicate
+        return Response({
+            'is_correct': existing_answer.is_correct,
+            'correct_answer': question.correct_answer,
+            'explanation': question.explanation,
+            'current_streak': session.current_streak,
+            'quiz_completed': session.is_completed,
+            'session_stats': {
+                'total_questions': session.total_questions,
+                'correct_answers': session.correct_answers,
+                'accuracy': session.accuracy
+            }
+        })
+
     is_correct = selected_answer == question.correct_answer
 
     answer = Answer.objects.create(
@@ -133,6 +151,10 @@ def submit_answer(request):
         is_correct=is_correct,
         response_time=response_time
     )
+
+    # Increment total_questions AFTER user submits answer
+    # This ensures accurate counting even with React StrictMode
+    session.total_questions += 1
 
     if is_correct:
         session.correct_answers += 1
@@ -149,7 +171,7 @@ def submit_answer(request):
         profile.highest_streak = session.current_streak
     profile.save()
 
-    # Check if quiz should be completed (e.g., after 10 questions)
+    # Check if quiz should be completed (after 10 questions answered)
     quiz_completed = session.total_questions >= 10
 
     if quiz_completed and not session.is_completed:
