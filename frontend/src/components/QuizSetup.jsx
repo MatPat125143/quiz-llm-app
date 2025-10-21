@@ -10,23 +10,23 @@ export default function QuizSetup() {
     const navigate = useNavigate();
 
     const predefinedTopics = [
-        'Python Programming',
+        'Programowanie w Python',
         'JavaScript',
         'React',
-        'Machine Learning',
-        'Data Science',
-        'Web Development',
-        'Algorithms',
-        'Database Systems',
-        'Cybersecurity',
-        'Cloud Computing'
+        'Uczenie maszynowe',
+        'Analiza danych',
+        'Tworzenie stron internetowych',
+        'Algorytmy',
+        'Systemy baz danych',
+        'Cyberbezpieczeństwo',
+        'Chmura obliczeniowa'
     ];
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         if (!topic.trim()) {
-            setError('Please enter or select a topic');
+            setError('Proszę wprowadzić lub wybrać temat');
             return;
         }
 
@@ -37,7 +37,7 @@ export default function QuizSetup() {
             const response = await startQuiz(topic, difficulty);
             navigate(`/quiz/play/${response.session_id}`);
         } catch (err) {
-            setError('Failed to start quiz. Please try again.');
+            setError('Nie udało się uruchomić quizu. Spróbuj ponownie.');
         } finally {
             setLoading(false);
         }
@@ -47,8 +47,8 @@ export default function QuizSetup() {
         <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl">
                 <div className="text-center mb-8">
-                    <h1 className="text-4xl font-bold text-gray-800 mb-2">🎯 Start New Quiz</h1>
-                    <p className="text-gray-600">Choose your topic and difficulty level</p>
+                    <h1 className="text-4xl font-bold text-gray-800 mb-2">🎯 Rozpocznij nowy quiz</h1>
+                    <p className="text-gray-600">Wybierz temat i poziom trudności</p>
                 </div>
 
                 {error && (
@@ -60,19 +60,19 @@ export default function QuizSetup() {
                 <form onSubmit={handleSubmit}>
                     <div className="mb-6">
                         <label className="block text-gray-700 font-bold mb-3 text-lg">
-                            Quiz Topic
+                            Temat quizu
                         </label>
                         <input
                             type="text"
                             value={topic}
                             onChange={(e) => setTopic(e.target.value)}
-                            placeholder="Enter custom topic or select below"
+                            placeholder="Wprowadź własny temat lub wybierz poniżej"
                             className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-lg"
                             disabled={loading}
                         />
 
                         <div className="mt-4">
-                            <p className="text-sm text-gray-600 mb-2 font-semibold">Or select a popular topic:</p>
+                            <p className="text-sm text-gray-600 mb-2 font-semibold">Lub wybierz popularny temat:</p>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                 {predefinedTopics.map((t) => (
                                     <button
@@ -95,7 +95,7 @@ export default function QuizSetup() {
 
                     <div className="mb-8">
                         <label className="block text-gray-700 font-bold mb-3 text-lg">
-                            Difficulty Level
+                            Poziom trudności
                         </label>
                         <div className="grid grid-cols-3 gap-4">
                             <button
@@ -109,7 +109,7 @@ export default function QuizSetup() {
                                 disabled={loading}
                             >
                                 <div className="text-3xl mb-1">😊</div>
-                                <div>Easy</div>
+                                <div>Łatwy</div>
                             </button>
 
                             <button
@@ -123,7 +123,7 @@ export default function QuizSetup() {
                                 disabled={loading}
                             >
                                 <div className="text-3xl mb-1">🤔</div>
-                                <div>Medium</div>
+                                <div>Średni</div>
                             </button>
 
                             <button
@@ -137,7 +137,7 @@ export default function QuizSetup() {
                                 disabled={loading}
                             >
                                 <div className="text-3xl mb-1">😰</div>
-                                <div>Hard</div>
+                                <div>Trudny</div>
                             </button>
                         </div>
                     </div>
@@ -149,14 +149,14 @@ export default function QuizSetup() {
                             className="flex-1 bg-gray-300 text-gray-700 py-4 rounded-lg hover:bg-gray-400 transition font-bold text-lg"
                             disabled={loading}
                         >
-                            Cancel
+                            Anuluj
                         </button>
                         <button
                             type="submit"
                             disabled={loading}
                             className="flex-1 bg-blue-600 text-white py-4 rounded-lg hover:bg-blue-700 transition font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {loading ? 'Starting Quiz...' : 'Start Quiz 🚀'}
+                            {loading ? 'Uruchamianie quizu...' : 'Rozpocznij quiz 🚀'}
                         </button>
                     </div>
                 </form>
