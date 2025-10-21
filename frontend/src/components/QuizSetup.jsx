@@ -7,19 +7,25 @@ export default function QuizSetup() {
     const [difficulty, setDifficulty] = useState('medium');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [showAdvanced, setShowAdvanced] = useState(false);
+
+    // Zaawansowane ustawienia
+    const [questionsCount, setQuestionsCount] = useState(10);
+    const [timePerQuestion, setTimePerQuestion] = useState(30);
+    const [useAdaptiveDifficulty, setUseAdaptiveDifficulty] = useState(true);
+
     const navigate = useNavigate();
 
     const predefinedTopics = [
-        'Programowanie w Python',
-        'JavaScript',
-        'React',
-        'Uczenie maszynowe',
-        'Analiza danych',
-        'Tworzenie stron internetowych',
-        'Algorytmy',
-        'Systemy baz danych',
-        'Cyberbezpieczeństwo',
-        'Chmura obliczeniowa'
+        'Język polski',
+        'Matematyka',
+        'Historia',
+        'Geografia',
+        'Biologia',
+        'Chemia',
+        'Fizyka',
+        'Wiedza o społeczeństwie',
+        'Język angielski'
     ];
 
     const handleSubmit = async (e) => {
@@ -34,7 +40,13 @@ export default function QuizSetup() {
         setError('');
 
         try {
-            const response = await startQuiz(topic, difficulty);
+            const response = await startQuiz(
+                topic,
+                difficulty,
+                questionsCount,
+                timePerQuestion,
+                useAdaptiveDifficulty
+            );
             navigate(`/quiz/play/${response.session_id}`);
         } catch (err) {
             setError('Nie udało się uruchomić quizu. Spróbuj ponownie.');
@@ -93,7 +105,7 @@ export default function QuizSetup() {
                         </div>
                     </div>
 
-                    <div className="mb-8">
+                    <div className="mb-6">
                         <label className="block text-gray-700 font-bold mb-3 text-lg">
                             Poziom trudności
                         </label>
@@ -140,6 +152,99 @@ export default function QuizSetup() {
                                 <div>Trudny</div>
                             </button>
                         </div>
+                        {useAdaptiveDifficulty && (
+                            <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <p className="text-sm text-blue-800">
+                                    ℹ️ <strong>Adaptacyjny poziom trudności:</strong> Poziom trudności będzie automatycznie dostosowywany na podstawie Twoich odpowiedzi.
+                                    Jeśli odpowiesz poprawnie na serię pytań, poziom trudności wzrośnie. W przypadku błędnych odpowiedzi, trudność zostanie zmniejszona.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Zaawansowane ustawienia */}
+                    <div className="mb-8 border-t pt-6">
+                        <button
+                            type="button"
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                            className="flex items-center justify-between w-full text-gray-700 font-bold text-lg mb-4 hover:text-blue-600 transition"
+                        >
+                            <span>⚙️ Ustawienia zaawansowane</span>
+                            <span className="text-2xl">{showAdvanced ? '▼' : '▶'}</span>
+                        </button>
+
+                        {showAdvanced && (
+                            <div className="space-y-6 bg-gray-50 rounded-lg p-6">
+                                {/* Liczba pytań */}
+                                <div>
+                                    <label className="block text-gray-700 font-semibold mb-2">
+                                        Liczba pytań: <span className="text-blue-600">{questionsCount}</span>
+                                    </label>
+                                    <input
+                                        type="range"
+                                        min="5"
+                                        max="20"
+                                        value={questionsCount}
+                                        onChange={(e) => setQuestionsCount(Number(e.target.value))}
+                                        className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                        disabled={loading}
+                                    />
+                                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                        <span>5</span>
+                                        <span>20</span>
+                                    </div>
+                                </div>
+
+                                {/* Czas na pytanie */}
+                                <div>
+                                    <label className="block text-gray-700 font-semibold mb-2">
+                                        Czas na pytanie: <span className="text-blue-600">{timePerQuestion}s</span>
+                                    </label>
+                                    <input
+                                        type="range"
+                                        min="10"
+                                        max="60"
+                                        step="5"
+                                        value={timePerQuestion}
+                                        onChange={(e) => setTimePerQuestion(Number(e.target.value))}
+                                        className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                        disabled={loading}
+                                    />
+                                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                        <span>10s</span>
+                                        <span>60s</span>
+                                    </div>
+                                </div>
+
+                                {/* Stały poziom trudności */}
+                                <div className="flex items-center justify-between bg-white rounded-lg p-4 border-2 border-gray-200">
+                                    <div>
+                                        <label className="text-gray-700 font-semibold cursor-pointer">
+                                            Adaptacyjny poziom trudności
+                                        </label>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            {useAdaptiveDifficulty
+                                                ? 'Poziom trudności dostosowuje się do Twoich odpowiedzi'
+                                                : 'Stały poziom trudności przez cały quiz'}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setUseAdaptiveDifficulty(!useAdaptiveDifficulty)}
+                                        className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                                            useAdaptiveDifficulty ? 'bg-blue-600' : 'bg-gray-300'
+                                        }`}
+                                        disabled={loading}
+                                    >
+                                        <span
+                                            className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                                                useAdaptiveDifficulty ? 'translate-x-7' : 'translate-x-1'
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex gap-4">

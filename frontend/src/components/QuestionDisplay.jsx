@@ -10,6 +10,7 @@ export default function QuestionDisplay() {
     const [loading, setLoading] = useState(true);
     const [submitted, setSubmitted] = useState(false);
     const [feedback, setFeedback] = useState(null);
+    const [difficultyNotification, setDifficultyNotification] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -29,7 +30,8 @@ export default function QuestionDisplay() {
         try {
             const data = await getQuestion(sessionId);
             setQuestion(data);
-            setTimeLeft(30);
+            // Użyj czasu z ustawień sesji lub domyślnie 30 sekund
+            setTimeLeft(data.time_per_question || 30);
         } catch (err) {
             console.error('Error loading question:', err);
             if (err.response?.status === 404) {
@@ -46,11 +48,23 @@ export default function QuestionDisplay() {
         setSubmitted(true);
 
         try {
-            const responseTime = 30 - timeLeft;
+            const timePerQuestion = question.time_per_question || 30;
+            const responseTime = timePerQuestion - timeLeft;
             // Convert option letter to actual answer text
             const answerText = selectedAnswer ? question[`option_${selectedAnswer.toLowerCase()}`] : '';
             const result = await submitAnswer(question.question_id, answerText, responseTime);
             setFeedback(result);
+
+            // Pokaż powiadomienie o zmianie poziomu trudności
+            if (result.difficulty_changed) {
+                const difficultyDirection = result.new_difficulty > result.previous_difficulty ? 'wzrósł' : 'spadł';
+                setDifficultyNotification({
+                    message: `Poziom trudności ${difficultyDirection}!`,
+                    direction: result.new_difficulty > result.previous_difficulty ? 'up' : 'down'
+                });
+                // Ukryj powiadomienie po 2 sekundach
+                setTimeout(() => setDifficultyNotification(null), 2000);
+            }
 
             setTimeout(() => {
                 if (result.quiz_completed) {
@@ -136,6 +150,23 @@ export default function QuestionDisplay() {
                     </div>
                 </div>
 
+                {/* Difficulty Change Notification */}
+                {difficultyNotification && (
+                    <div className={`rounded-2xl shadow-2xl p-4 mb-4 ${
+                        difficultyNotification.direction === 'up'
+                            ? 'bg-orange-100 border-2 border-orange-400'
+                            : 'bg-blue-100 border-2 border-blue-400'
+                    } animate-pulse`}>
+                        <p className={`text-lg font-bold text-center ${
+                            difficultyNotification.direction === 'up'
+                                ? 'text-orange-800'
+                                : 'text-blue-800'
+                        }`}>
+                            {difficultyNotification.direction === 'up' ? '📈' : '📉'} {difficultyNotification.message}
+                        </p>
+                    </div>
+                )}
+
                 {/* Feedback */}
                 {feedback && (
                     <div className={`rounded-2xl shadow-2xl p-6 mb-4 ${
@@ -147,6 +178,13 @@ export default function QuestionDisplay() {
                             {feedback.is_correct ? '✅ Poprawnie!' : '❌ Niepoprawnie'}
                         </h4>
                         <p className="text-gray-800 text-lg">{feedback.explanation}</p>
+                        {feedback.current_streak >= 3 && question?.use_adaptive_difficulty && (
+                            <div className="mt-3 pt-3 border-t border-gray-300">
+                                <p className="text-sm text-gray-700">
+                                    🔥 Świetna passa! {feedback.current_streak} poprawnych odpowiedzi z rzędu!
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 

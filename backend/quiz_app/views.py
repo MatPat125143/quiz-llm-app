@@ -8,11 +8,13 @@ from .models import QuizSession, Question, Answer
 from .serializers import QuizSessionSerializer, QuestionSerializer
 from .permissions import IsQuizOwnerOrAdmin
 from llm_integration.question_generator import QuestionGenerator
+from llm_integration.difficulty_adapter import DifficultyAdapter
 import json
 import random
 
 # Inicjalizuj generator (bezpieczny - używa fake questions jeśli brak API key)
 generator = QuestionGenerator()
+difficulty_adapter = DifficultyAdapter()
 
 
 @api_view(['POST'])
@@ -20,6 +22,13 @@ generator = QuestionGenerator()
 def start_quiz(request):
     topic = request.data.get('topic')
     difficulty = request.data.get('difficulty', 'medium')
+    questions_count = request.data.get('questions_count', 10)
+    time_per_question = request.data.get('time_per_question', 30)
+    use_adaptive_difficulty = request.data.get('use_adaptive_difficulty', True)
+
+    # Walidacja parametrów
+    questions_count = min(max(int(questions_count), 5), 20)  # 5-20
+    time_per_question = min(max(int(time_per_question), 10), 60)  # 10-60
 
     difficulty_map = {
         'easy': 2.0,
@@ -33,7 +42,10 @@ def start_quiz(request):
         user=request.user,
         topic=topic,
         initial_difficulty=difficulty,
-        current_difficulty=initial_difficulty
+        current_difficulty=initial_difficulty,
+        questions_count=questions_count,
+        time_per_question=time_per_question,
+        use_adaptive_difficulty=use_adaptive_difficulty
     )
 
     profile = request.user.profile
@@ -44,7 +56,10 @@ def start_quiz(request):
         'session_id': session.id,
         'message': 'Quiz started successfully!',
         'topic': topic,
-        'difficulty': difficulty
+        'difficulty': difficulty,
+        'questions_count': questions_count,
+        'time_per_question': time_per_question,
+        'use_adaptive_difficulty': use_adaptive_difficulty
     }, status=status.HTTP_201_CREATED)
 
 
@@ -105,7 +120,9 @@ def get_question(request, session_id):
         'option_c': answers[2],
         'option_d': answers[3],
         'current_difficulty': session.current_difficulty,
-        'question_number': session.total_questions + 1  # Next question number
+        'question_number': session.total_questions + 1,  # Next question number
+        'time_per_question': session.time_per_question,
+        'use_adaptive_difficulty': session.use_adaptive_difficulty
     })
 
 
@@ -161,6 +178,29 @@ def submit_answer(request):
         session.current_streak += 1
     else:
         session.current_streak = 0
+
+    # Adaptacyjna zmiana poziomu trudności (jeśli włączona)
+    previous_difficulty = session.current_difficulty
+    difficulty_changed = False
+    if session.use_adaptive_difficulty:
+        # Pobierz ostatnie odpowiedzi dla tej sesji
+        recent_answers_objs = Answer.objects.filter(
+            question__session=session
+        ).order_by('-answered_at')[:difficulty_adapter.streak_threshold]
+
+        # Przekonwertuj na listę boolean (True = poprawna, False = błędna)
+        recent_answers = [ans.is_correct for ans in reversed(list(recent_answers_objs))]
+
+        # Dostosuj poziom trudności
+        new_difficulty = difficulty_adapter.adjust_difficulty(
+            session.current_difficulty,
+            recent_answers
+        )
+
+        if new_difficulty != session.current_difficulty:
+            difficulty_changed = True
+            session.current_difficulty = new_difficulty
+
     session.save()
 
     profile = request.user.profile
@@ -171,8 +211,8 @@ def submit_answer(request):
         profile.highest_streak = session.current_streak
     profile.save()
 
-    # Check if quiz should be completed (after 10 questions answered)
-    quiz_completed = session.total_questions >= 10
+    # Check if quiz should be completed (after reaching questions_count)
+    quiz_completed = session.total_questions >= session.questions_count
 
     if quiz_completed and not session.is_completed:
         session.ended_at = timezone.now()
@@ -185,6 +225,9 @@ def submit_answer(request):
         'explanation': question.explanation,
         'current_streak': session.current_streak,
         'quiz_completed': quiz_completed,
+        'difficulty_changed': difficulty_changed,
+        'previous_difficulty': previous_difficulty if difficulty_changed else None,
+        'new_difficulty': session.current_difficulty if difficulty_changed else None,
         'session_stats': {
             'total_questions': session.total_questions,
             'correct_answers': session.correct_answers,
