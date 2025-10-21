@@ -82,11 +82,15 @@ def get_question(request, session_id):
     session.save()
 
     return Response({
-        'question_id': question.id,
+        'id': question.id,
         'question_text': question.question_text,
-        'answers': answers,
+        'option_a': answers[0],
+        'option_b': answers[1],
+        'option_c': answers[2],
+        'option_d': answers[3],
         'current_difficulty': session.current_difficulty,
-        'question_number': session.total_questions
+        'question_number': session.total_questions,
+        'topic': session.topic
     })
 
 
@@ -121,6 +125,13 @@ def submit_answer(request):
         session.current_streak += 1
     else:
         session.current_streak = 0
+
+    # Sprawdź czy quiz powinien się zakończyć (np. po 10 pytaniach)
+    quiz_completed = session.total_questions >= 10
+    if quiz_completed and not session.is_completed:
+        session.ended_at = timezone.now()
+        session.is_completed = True
+
     session.save()
 
     profile = request.user.profile
@@ -136,6 +147,7 @@ def submit_answer(request):
         'correct_answer': question.correct_answer,
         'explanation': question.explanation,
         'current_streak': session.current_streak,
+        'quiz_completed': quiz_completed,
         'session_stats': {
             'total_questions': session.total_questions,
             'correct_answers': session.correct_answers,
