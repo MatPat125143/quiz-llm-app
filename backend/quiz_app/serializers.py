@@ -5,12 +5,15 @@ from .models import QuizSession, Question, Answer
 class QuizSessionSerializer(serializers.ModelSerializer):
     accuracy = serializers.ReadOnlyField()
     username = serializers.CharField(source='user.username', read_only=True)
+    difficulty = serializers.CharField(source='initial_difficulty', read_only=True)
+    score = serializers.IntegerField(source='correct_answers', read_only=True)
+    completed_at = serializers.DateTimeField(source='ended_at', read_only=True)
 
     class Meta:
         model = QuizSession
-        fields = ['id', 'username', 'topic', 'initial_difficulty', 'current_difficulty',
-                  'started_at', 'ended_at', 'is_completed', 'total_questions',
-                  'correct_answers', 'current_streak', 'accuracy']
+        fields = ['id', 'username', 'topic', 'initial_difficulty', 'difficulty', 'current_difficulty',
+                  'started_at', 'ended_at', 'completed_at', 'is_completed', 'total_questions',
+                  'correct_answers', 'score', 'current_streak', 'accuracy']
 
 
 class QuestionSerializer(serializers.ModelSerializer):
