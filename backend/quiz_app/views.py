@@ -193,10 +193,34 @@ def quiz_details(request, session_id):
     for q in questions:
         answer = q.answers.first()
         if answer:
+            # Stwórz losowe mapowanie opcji (jak w get_question)
+            answers = [
+                q.correct_answer,
+                q.wrong_answer_1,
+                q.wrong_answer_2,
+                q.wrong_answer_3
+            ]
+            random.shuffle(answers)
+
+            # Znajdź która litera odpowiada wybranej i poprawnej odpowiedzi
+            selected_letter = None
+            correct_letter = None
+            for idx, ans in enumerate(answers):
+                letter = chr(65 + idx)  # A=65, B=66, C=67, D=68
+                if ans == answer.selected_answer:
+                    selected_letter = letter
+                if ans == q.correct_answer:
+                    correct_letter = letter
+
             questions_data.append({
+                'id': q.id,
                 'question_text': q.question_text,
-                'your_answer': answer.selected_answer,
-                'correct_answer': q.correct_answer,
+                'option_a': answers[0],
+                'option_b': answers[1],
+                'option_c': answers[2],
+                'option_d': answers[3],
+                'selected_answer': selected_letter,
+                'correct_answer': correct_letter,
                 'is_correct': answer.is_correct,
                 'explanation': q.explanation,
                 'response_time': answer.response_time,
@@ -206,10 +230,13 @@ def quiz_details(request, session_id):
     return Response({
         'session_id': session.id,
         'topic': session.topic,
+        'difficulty': session.initial_difficulty,
         'started_at': session.started_at,
         'ended_at': session.ended_at,
+        'completed_at': session.ended_at,
         'total_questions': session.total_questions,
         'correct_answers': session.correct_answers,
+        'score': session.correct_answers,
         'accuracy': session.accuracy,
         'questions': questions_data
     })

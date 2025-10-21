@@ -61,6 +61,12 @@ function App() {
                         <QuizDetails />
                     </ProtectedRoute>
                 } />
+
+                <Route path="/quiz/results/:sessionId" element={
+                    <ProtectedRoute>
+                        <QuizDetails />
+                    </ProtectedRoute>
+                } />
             </Routes>
         </BrowserRouter>
     );
