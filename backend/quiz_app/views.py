@@ -53,6 +53,13 @@ def start_quiz(request):
 def get_question(request, session_id):
     session = get_object_or_404(QuizSession, id=session_id, user=request.user)
 
+    # Check if quiz is already completed
+    if session.is_completed:
+        return Response(
+            {'error': 'Quiz already completed'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
     # Generuj pytanie (użyje LLM jeśli dostępny, inaczej fake)
     question_data = generator.generate_question(
         session.topic,
@@ -81,10 +88,21 @@ def get_question(request, session_id):
     session.total_questions += 1
     session.save()
 
+    # Map answers to option letters A, B, C, D
+    option_mapping = {}
+    for i, answer in enumerate(answers):
+        option_letter = chr(65 + i)  # A=65, B=66, C=67, D=68
+        option_mapping[option_letter] = answer
+
     return Response({
         'question_id': question.id,
         'question_text': question.question_text,
+        'topic': session.topic,
         'answers': answers,
+        'option_a': answers[0],
+        'option_b': answers[1],
+        'option_c': answers[2],
+        'option_d': answers[3],
         'current_difficulty': session.current_difficulty,
         'question_number': session.total_questions
     })
@@ -131,11 +149,20 @@ def submit_answer(request):
         profile.highest_streak = session.current_streak
     profile.save()
 
+    # Check if quiz should be completed (e.g., after 10 questions)
+    quiz_completed = session.total_questions >= 10
+
+    if quiz_completed and not session.is_completed:
+        session.ended_at = timezone.now()
+        session.is_completed = True
+        session.save()
+
     return Response({
         'is_correct': is_correct,
         'correct_answer': question.correct_answer,
         'explanation': question.explanation,
         'current_streak': session.current_streak,
+        'quiz_completed': quiz_completed,
         'session_stats': {
             'total_questions': session.total_questions,
             'correct_answers': session.correct_answers,
@@ -181,10 +208,30 @@ def quiz_details(request, session_id):
     for q in questions:
         answer = q.answers.first()
         if answer:
+            # Create shuffled answers list matching how they were presented
+            answers = [
+                q.correct_answer,
+                q.wrong_answer_1,
+                q.wrong_answer_2,
+                q.wrong_answer_3
+            ]
+            random.shuffle(answers)
+
+            # Map to A, B, C, D options
+            option_mapping = {}
+            for i, ans in enumerate(answers):
+                option_letter = chr(65 + i)  # A=65, B=66, C=67, D=68
+                option_mapping[ans] = option_letter
+
             questions_data.append({
+                'id': q.id,
                 'question_text': q.question_text,
-                'your_answer': answer.selected_answer,
-                'correct_answer': q.correct_answer,
+                'option_a': answers[0],
+                'option_b': answers[1],
+                'option_c': answers[2],
+                'option_d': answers[3],
+                'selected_answer': option_mapping.get(answer.selected_answer, ''),
+                'correct_answer': option_mapping.get(q.correct_answer, 'A'),
                 'is_correct': answer.is_correct,
                 'explanation': q.explanation,
                 'response_time': answer.response_time,
@@ -192,12 +239,16 @@ def quiz_details(request, session_id):
             })
 
     return Response({
+        'id': session.id,
         'session_id': session.id,
         'topic': session.topic,
+        'difficulty': session.initial_difficulty,
         'started_at': session.started_at,
         'ended_at': session.ended_at,
+        'completed_at': session.ended_at,
         'total_questions': session.total_questions,
         'correct_answers': session.correct_answers,
+        'score': session.correct_answers,
         'accuracy': session.accuracy,
         'questions': questions_data
     })

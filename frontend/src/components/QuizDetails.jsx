@@ -57,7 +57,7 @@ export default function QuizDetails() {
                         <div>
                             <h1 className="text-3xl font-bold text-gray-800">{quiz.topic}</h1>
                             <p className="text-gray-600 mt-2">
-                                {new Date(quiz.completed_at).toLocaleDateString('pl-PL', {
+                                {new Date(quiz.ended_at || quiz.completed_at).toLocaleDateString('pl-PL', {
                                     year: 'numeric',
                                     month: 'long',
                                     day: 'numeric',
@@ -68,7 +68,7 @@ export default function QuizDetails() {
                         </div>
                         <div className="text-right">
                             <p className="text-4xl font-bold text-blue-600">
-                                {quiz.score}/{quiz.total_questions}
+                                {quiz.correct_answers}/{quiz.total_questions}
                             </p>
                             <p className="text-gray-600">{quiz.accuracy}% dokładności</p>
                         </div>
@@ -118,7 +118,7 @@ export default function QuizDetails() {
 
                                 return (
                                     <div
-                                        key={option}
+                                        key={`${question.id}-${option}`}
                                         className={`p-4 rounded-lg border-2 transition ${
                                             isCorrect
                                                 ? 'bg-green-100 border-green-500'

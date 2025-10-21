@@ -33,7 +33,7 @@ export default function QuestionDisplay() {
         } catch (err) {
             console.error('Error loading question:', err);
             if (err.response?.status === 404) {
-                navigate(`/quiz/results/${sessionId}`);
+                navigate(`/quiz/details/${sessionId}`);
             }
         } finally {
             setLoading(false);
@@ -47,12 +47,14 @@ export default function QuestionDisplay() {
 
         try {
             const responseTime = 30 - timeLeft;
-            const result = await submitAnswer(question.id, selectedAnswer || '', responseTime);
+            // Convert option letter to actual answer text
+            const answerText = selectedAnswer ? question[`option_${selectedAnswer.toLowerCase()}`] : '';
+            const result = await submitAnswer(question.question_id, answerText, responseTime);
             setFeedback(result);
 
             setTimeout(() => {
                 if (result.quiz_completed) {
-                    navigate(`/quiz/results/${sessionId}`);
+                    navigate(`/quiz/details/${sessionId}`);
                 } else {
                     setSubmitted(false);
                     setSelectedAnswer('');
@@ -108,7 +110,7 @@ export default function QuestionDisplay() {
                         {['A', 'B', 'C', 'D'].map((option) => {
                             const optionText = question[`option_${option.toLowerCase()}`];
                             const isSelected = selectedAnswer === option;
-                            const isCorrect = feedback && option === feedback.correct_answer;
+                            const isCorrect = feedback && optionText === feedback.correct_answer;
                             const isWrong = feedback && selectedAnswer === option && !feedback.is_correct;
 
                             return (

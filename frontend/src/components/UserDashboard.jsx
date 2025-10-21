@@ -189,7 +189,7 @@ export default function UserDashboard() {
                                         </div>
                                         <div className="text-right">
                                             <p className="text-3xl font-bold text-blue-600">
-                                                {quiz.score}/{quiz.total_questions}
+                                                {quiz.correct_answers}/{quiz.total_questions}
                                             </p>
                                             <p className="text-sm text-gray-500">{quiz.accuracy}%</p>
                                         </div>
