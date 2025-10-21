@@ -14,6 +14,11 @@ class QuizSession(models.Model):
     correct_answers = models.IntegerField(default=0)
     current_streak = models.IntegerField(default=0)
 
+    # Zaawansowane ustawienia
+    questions_count = models.IntegerField(default=10)  # Liczba pytań w quizie (max 20)
+    time_per_question = models.IntegerField(default=30)  # Czas w sekundach na pytanie (max 60)
+    use_adaptive_difficulty = models.BooleanField(default=True)  # Czy używać adaptacyjnego poziomu trudności
+
     class Meta:
         ordering = ['-started_at']
         verbose_name = 'Quiz Session'
