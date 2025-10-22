@@ -184,6 +184,7 @@ export default function QuizSetup() {
                                         type="range"
                                         min="5"
                                         max="20"
+                                        step="1"
                                         value={questionsCount}
                                         onChange={(e) => setQuestionsCount(Number(e.target.value))}
                                         className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600"

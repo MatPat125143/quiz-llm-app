@@ -175,8 +175,8 @@ export default function UserDashboard() {
                                             </p>
                                             <div className="flex gap-2 mt-2">
                                                 <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                                    quiz.difficulty === 'easy' 
-                                                        ? 'bg-green-100 text-green-800' 
+                                                    quiz.difficulty === 'easy'
+                                                        ? 'bg-green-100 text-green-800'
                                                         : quiz.difficulty === 'medium'
                                                         ? 'bg-yellow-100 text-yellow-800'
                                                         : 'bg-red-100 text-red-800'
@@ -185,6 +185,11 @@ export default function UserDashboard() {
                                                     {quiz.difficulty === 'medium' && '🟡 Średni'}
                                                     {quiz.difficulty === 'hard' && '🔴 Trudny'}
                                                 </span>
+                                                {quiz.is_custom && (
+                                                    <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+                                                        ⚙️ Custom
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="text-right">

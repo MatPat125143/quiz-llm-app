@@ -1,7 +1,7 @@
 class DifficultyAdapter:
     def __init__(self):
-        self.streak_threshold = 3
-        self.difficulty_step = 0.5
+        self.streak_threshold = 2  # Zmniejszono z 3 na 2 dla szybszej adaptacji
+        self.difficulty_step = 0.75  # Zwiększono z 0.5 na 0.75 dla większych skoków
         self.min_difficulty = 1.0
         self.max_difficulty = 10.0
 

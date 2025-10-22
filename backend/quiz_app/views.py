@@ -303,11 +303,26 @@ def quiz_details(request, session_id):
                 'difficulty': q.difficulty_level
             })
 
+    # Mapuj initial_difficulty string na wartość numeryczną
+    difficulty_map = {
+        'easy': 2.0,
+        'medium': 5.0,
+        'hard': 8.0
+    }
+    initial_difficulty_value = difficulty_map.get(session.initial_difficulty, 5.0)
+
+    # Sprawdź czy używa custom settings
+    is_custom = (session.questions_count != 10 or
+                 session.time_per_question != 30 or
+                 not session.use_adaptive_difficulty)
+
     return Response({
         'id': session.id,
         'session_id': session.id,
         'topic': session.topic,
         'difficulty': session.initial_difficulty,
+        'initial_difficulty_value': initial_difficulty_value,
+        'current_difficulty': session.current_difficulty,
         'started_at': session.started_at,
         'ended_at': session.ended_at,
         'completed_at': session.ended_at,
@@ -315,5 +330,9 @@ def quiz_details(request, session_id):
         'correct_answers': session.correct_answers,
         'score': session.correct_answers,
         'accuracy': session.accuracy,
+        'questions_count': session.questions_count,
+        'time_per_question': session.time_per_question,
+        'use_adaptive_difficulty': session.use_adaptive_difficulty,
+        'is_custom': is_custom,
         'questions': questions_data
     })
