@@ -7,6 +7,7 @@ import AdminPanel from './components/AdminPanel';
 import QuizSetup from './components/QuizSetup';
 import QuestionDisplay from './components/QuestionDisplay';
 import QuizDetails from './components/QuizDetails';
+import QuizHistory from './components/QuizHistory';
 import UserProfile from './components/UserProfile';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -59,6 +60,12 @@ function App() {
                 <Route path="/quiz/details/:sessionId" element={
                     <ProtectedRoute>
                         <QuizDetails />
+                    </ProtectedRoute>
+                } />
+
+                <Route path="/quiz/history" element={
+                    <ProtectedRoute>
+                        <QuizHistory />
                     </ProtectedRoute>
                 } />
             </Routes>

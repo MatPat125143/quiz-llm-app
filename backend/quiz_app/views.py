@@ -259,8 +259,71 @@ def end_quiz(request, session_id):
 @permission_classes([IsAuthenticated])
 def quiz_history(request):
     sessions = QuizSession.objects.filter(user=request.user)
+
+    # Filtracja
+    topic = request.GET.get('topic')
+    difficulty = request.GET.get('difficulty')
+    is_custom = request.GET.get('is_custom')
+
+    if topic:
+        sessions = sessions.filter(topic__icontains=topic)
+    if difficulty:
+        sessions = sessions.filter(initial_difficulty=difficulty)
+    if is_custom == 'true':
+        sessions = sessions.exclude(
+            questions_count=10,
+            time_per_question=30,
+            use_adaptive_difficulty=True
+        )
+    elif is_custom == 'false':
+        sessions = sessions.filter(
+            questions_count=10,
+            time_per_question=30,
+            use_adaptive_difficulty=True
+        )
+
+    # Sortowanie
+    order_by = request.GET.get('order_by', '-started_at')
+    allowed_sorts = ['started_at', '-started_at', 'topic', '-topic',
+                     'accuracy', '-accuracy', 'total_questions', '-total_questions']
+    if order_by in allowed_sorts:
+        # Dla accuracy potrzebujemy sortować po obliczonym polu
+        if order_by in ['accuracy', '-accuracy']:
+            sessions_list = list(sessions)
+            sessions_list.sort(key=lambda x: x.accuracy, reverse=order_by.startswith('-'))
+
+            # Paginacja dla posortowanej listy
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 10))
+            start = (page - 1) * page_size
+            end = start + page_size
+
+            serializer = QuizSessionSerializer(sessions_list[start:end], many=True)
+
+            return Response({
+                'count': len(sessions_list),
+                'next': page * page_size < len(sessions_list),
+                'previous': page > 1,
+                'results': serializer.data
+            })
+        else:
+            sessions = sessions.order_by(order_by)
+
+    # Paginacja
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 10))
+
+    total_count = sessions.count()
+    sessions = sessions[(page - 1) * page_size:page * page_size]
+
     serializer = QuizSessionSerializer(sessions, many=True)
-    return Response(serializer.data)
+
+    return Response({
+        'count': total_count,
+        'next': page * page_size < total_count,
+        'previous': page > 1,
+        'results': serializer.data
+    })
 
 
 @api_view(['GET'])
