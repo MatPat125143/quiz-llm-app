@@ -69,16 +69,22 @@ export default function QuestionDisplay() {
             setFeedback(result);
 
             // Pokaż powiadomienie o zmianie poziomu trudności
+            // TYLKO gdy zmienia się KATEGORIA (Łatwy → Średni → Trudny → Expert)
             if (result.difficulty_changed) {
+                const previousDifficultyInfo = getDifficultyInfo(result.previous_difficulty);
                 const newDifficultyInfo = getDifficultyInfo(result.new_difficulty);
-                setDifficultyNotification({
-                    level: newDifficultyInfo.label,
-                    color: newDifficultyInfo.color,
-                    icon: newDifficultyInfo.icon,
-                    direction: result.new_difficulty > result.previous_difficulty ? 'up' : 'down'
-                });
-                // Ukryj powiadomienie po 2.5 sekundach
-                setTimeout(() => setDifficultyNotification(null), 2500);
+
+                // Sprawdź czy zmieniła się kategoria (np. Średni → Trudny), a nie tylko wartość numeryczna
+                if (previousDifficultyInfo.label !== newDifficultyInfo.label) {
+                    setDifficultyNotification({
+                        level: newDifficultyInfo.label,
+                        color: newDifficultyInfo.color,
+                        icon: newDifficultyInfo.icon,
+                        direction: result.new_difficulty > result.previous_difficulty ? 'up' : 'down'
+                    });
+                    // Ukryj powiadomienie po 2.5 sekundach
+                    setTimeout(() => setDifficultyNotification(null), 2500);
+                }
             }
 
             setTimeout(() => {
@@ -174,12 +180,12 @@ export default function QuestionDisplay() {
 
                 {/* Difficulty Change Modal/Overlay */}
                 {difficultyNotification && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
-                        <div className={`${difficultyNotification.color} rounded-3xl shadow-2xl p-12 max-w-lg mx-4 transform animate-bounce border-4 ${
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm transition-opacity duration-300">
+                        <div className={`${difficultyNotification.color} rounded-3xl shadow-2xl p-12 max-w-lg mx-4 transform transition-all duration-300 scale-100 border-4 ${
                             difficultyNotification.direction === 'up' ? 'border-orange-500' : 'border-blue-500'
                         }`}>
                             <div className="text-center">
-                                <div className="text-8xl mb-6 animate-pulse">
+                                <div className="text-8xl mb-6">
                                     {difficultyNotification.direction === 'up' ? '📈' : '📉'}
                                 </div>
                                 <h2 className="text-4xl font-black mb-4">
