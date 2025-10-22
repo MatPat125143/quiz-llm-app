@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { startQuiz } from '../services/api';
+import { useState, useEffect } from 'react';
+import { startQuiz, getCurrentUser, logout } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export default function QuizSetup() {
+    const [user, setUser] = useState(null);
     const [topic, setTopic] = useState('');
     const [difficulty, setDifficulty] = useState('medium');
     const [loading, setLoading] = useState(false);
@@ -15,6 +16,24 @@ export default function QuizSetup() {
     const [useAdaptiveDifficulty, setUseAdaptiveDifficulty] = useState(true);
 
     const navigate = useNavigate();
+
+    useEffect(() => {
+        loadUser();
+    }, []);
+
+    const loadUser = async () => {
+        try {
+            const userData = await getCurrentUser();
+            setUser(userData);
+        } catch (err) {
+            console.error('Error loading user:', err);
+        }
+    };
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
 
     const predefinedTopics = [
         'Język polski',
@@ -56,12 +75,67 @@ export default function QuizSetup() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl">
-                <div className="text-center mb-8">
-                    <h1 className="text-4xl font-bold text-gray-800 mb-2">🎯 Rozpocznij nowy quiz</h1>
-                    <p className="text-gray-600">Wybierz temat i poziom trudności</p>
+        <div className="min-h-screen bg-gray-100">
+            {/* Header */}
+            <header className="bg-white shadow-md">
+                <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
+                    <h1 className="text-3xl font-bold text-blue-600">🎯 Rozpocznij nowy quiz</h1>
+                    <div className="flex items-center gap-4">
+                        {/* Avatar i nazwa użytkownika */}
+                        <div
+                            className="flex items-center gap-3 cursor-pointer hover:bg-gray-100 p-2 rounded-lg transition"
+                            onClick={() => navigate('/profile')}
+                        >
+                            {user?.profile?.avatar_url ? (
+                                <img
+                                    src={user.profile.avatar_url}
+                                    alt="Avatar"
+                                    className="w-10 h-10 rounded-full object-cover border-2 border-blue-500"
+                                />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center border-2 border-blue-500">
+                                    <span className="text-white font-bold text-lg">
+                                        {user?.email?.[0]?.toUpperCase() || '?'}
+                                    </span>
+                                </div>
+                            )}
+                            <span className="font-semibold text-gray-800">{user?.username}</span>
+                        </div>
+
+                        {/* Dashboard button */}
+                        <button
+                            onClick={() => navigate('/dashboard')}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-semibold"
+                        >
+                            ← Panel główny
+                        </button>
+
+                        {/* Admin button */}
+                        {user?.profile?.role === 'admin' && (
+                            <button
+                                onClick={() => navigate('/admin')}
+                                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition font-semibold"
+                            >
+                                👑 Panel admina
+                            </button>
+                        )}
+
+                        {/* Logout button */}
+                        <button
+                            onClick={handleLogout}
+                            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-semibold"
+                        >
+                            Wyloguj
+                        </button>
+                    </div>
                 </div>
+            </header>
+
+            <div className="max-w-4xl mx-auto px-4 py-8">
+                <div className="bg-white rounded-2xl shadow-lg p-8">
+                    <div className="text-center mb-8">
+                        <p className="text-gray-600 text-lg">Wybierz temat i poziom trudności</p>
+                    </div>
 
                 {error && (
                     <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
@@ -266,6 +340,7 @@ export default function QuizSetup() {
                         </button>
                     </div>
                 </form>
+                </div>
             </div>
         </div>
     );

@@ -149,18 +149,49 @@ export default function UserProfile() {
         <div className="min-h-screen bg-gray-100">
             {/* Header */}
             <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+                <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
                     <h1 className="text-3xl font-bold text-blue-600">👤 Profil użytkownika</h1>
-                    <div className="flex gap-4">
+                    <div className="flex items-center gap-4">
+                        {/* Avatar i nazwa użytkownika */}
+                        <div className="flex items-center gap-3">
+                            {user?.profile?.avatar_url ? (
+                                <img
+                                    src={user.profile.avatar_url}
+                                    alt="Avatar"
+                                    className="w-10 h-10 rounded-full object-cover border-2 border-blue-500"
+                                />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center border-2 border-blue-500">
+                                    <span className="text-white font-bold text-lg">
+                                        {user?.email?.[0]?.toUpperCase() || '?'}
+                                    </span>
+                                </div>
+                            )}
+                            <span className="font-semibold text-gray-800">{user?.username}</span>
+                        </div>
+
+                        {/* Dashboard button */}
                         <button
                             onClick={() => navigate('/dashboard')}
-                            className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition font-semibold"
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-semibold"
                         >
                             ← Panel główny
                         </button>
+
+                        {/* Admin button */}
+                        {user?.profile?.role === 'admin' && (
+                            <button
+                                onClick={() => navigate('/admin')}
+                                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition font-semibold"
+                            >
+                                👑 Panel admina
+                            </button>
+                        )}
+
+                        {/* Logout button */}
                         <button
                             onClick={handleLogout}
-                            className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition font-semibold"
+                            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-semibold"
                         >
                             Wyloguj
                         </button>
