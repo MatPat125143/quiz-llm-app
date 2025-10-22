@@ -31,13 +31,14 @@ export default function QuestionDisplay() {
     }, [sessionId]);
 
     useEffect(() => {
-        if (timeLeft > 0 && !submitted) {
+        // Timer nie działa jeśli popup poziomu trudności jest widoczny
+        if (timeLeft > 0 && !submitted && !difficultyNotification) {
             const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
             return () => clearTimeout(timer);
         } else if (timeLeft === 0 && !submitted) {
             handleSubmit();
         }
-    }, [timeLeft, submitted]);
+    }, [timeLeft, submitted, difficultyNotification]);
 
     const loadQuestion = async () => {
         try {
@@ -68,33 +69,50 @@ export default function QuestionDisplay() {
             const result = await submitAnswer(question.question_id, answerText, responseTime);
             setFeedback(result);
 
-            // Pokaż powiadomienie o zmianie poziomu trudności
-            // TYLKO gdy zmienia się KATEGORIA (Łatwy → Średni → Trudny → Expert)
+            // Sprawdź czy nastąpiła zmiana KATEGORII trudności
+            let shouldShowDifficultyPopup = false;
+            let difficultyData = null;
+
             if (result.difficulty_changed) {
                 const previousDifficultyInfo = getDifficultyInfo(result.previous_difficulty);
                 const newDifficultyInfo = getDifficultyInfo(result.new_difficulty);
 
                 // Sprawdź czy zmieniła się kategoria (np. Średni → Trudny), a nie tylko wartość numeryczna
                 if (previousDifficultyInfo.label !== newDifficultyInfo.label) {
-                    setDifficultyNotification({
+                    shouldShowDifficultyPopup = true;
+                    difficultyData = {
                         level: newDifficultyInfo.label,
                         color: newDifficultyInfo.color,
                         icon: newDifficultyInfo.icon,
                         direction: result.new_difficulty > result.previous_difficulty ? 'up' : 'down'
-                    });
-                    // Ukryj powiadomienie po 2.5 sekundach
-                    setTimeout(() => setDifficultyNotification(null), 2500);
+                    };
                 }
             }
 
+            // Najpierw pokaż feedback przez 3 sekundy
             setTimeout(() => {
                 if (result.quiz_completed) {
                     navigate(`/quiz/details/${sessionId}`);
                 } else {
-                    setSubmitted(false);
-                    setSelectedAnswer('');
-                    setFeedback(null);
-                    loadQuestion();
+                    // Jeśli zmiana kategorii - pokaż popup PRZED załadowaniem nowego pytania
+                    if (shouldShowDifficultyPopup) {
+                        setDifficultyNotification(difficultyData);
+
+                        // Po 2.5 sekundach ukryj popup i załaduj nowe pytanie
+                        setTimeout(() => {
+                            setDifficultyNotification(null);
+                            setSubmitted(false);
+                            setSelectedAnswer('');
+                            setFeedback(null);
+                            loadQuestion();
+                        }, 2500);
+                    } else {
+                        // Bez popup - załaduj nowe pytanie od razu
+                        setSubmitted(false);
+                        setSelectedAnswer('');
+                        setFeedback(null);
+                        loadQuestion();
+                    }
                 }
             }, 3000);
         } catch (err) {
