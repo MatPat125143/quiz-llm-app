@@ -134,12 +134,18 @@ export default function UserDashboard() {
                 </div>
 
                 {/* Start Quiz Button */}
-                <div className="mb-8">
+                <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <button
                         onClick={() => navigate('/quiz/setup')}
-                        className="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white py-6 rounded-2xl hover:from-green-600 hover:to-blue-600 transition shadow-lg font-bold text-2xl"
+                        className="bg-gradient-to-r from-green-500 to-blue-500 text-white py-6 rounded-2xl hover:from-green-600 hover:to-blue-600 transition shadow-lg font-bold text-2xl"
                     >
                         🚀 Rozpocznij nowy quiz
+                    </button>
+                    <button
+                        onClick={() => navigate('/quiz/history')}
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 text-white py-6 rounded-2xl hover:from-purple-600 hover:to-pink-600 transition shadow-lg font-bold text-2xl"
+                    >
+                        📚 Historia quizów
                     </button>
                 </div>
 
@@ -204,12 +210,12 @@ export default function UserDashboard() {
                         </div>
                     )}
 
-                    {quizzes.length > 5 && (
+                    {quizzes.length > 0 && (
                         <button
                             onClick={() => navigate('/quiz/history')}
                             className="w-full mt-6 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold"
                         >
-                            Zobacz wszystkie quizy →
+                            Zobacz pełną historię ({quizzes.length > 5 ? `${quizzes.length} quizów` : `${quizzes.length} quiz${quizzes.length === 1 ? '' : 'y'}`}) →
                         </button>
                     )}
                 </div>
