@@ -13,6 +13,19 @@ export default function QuestionDisplay() {
     const [difficultyNotification, setDifficultyNotification] = useState(null);
     const navigate = useNavigate();
 
+    // Funkcja mapująca poziom trudności na etykietę i kolor
+    const getDifficultyInfo = (difficulty) => {
+        if (difficulty <= 3) {
+            return { label: 'Łatwy', color: 'bg-green-100 text-green-800', icon: '🟢' };
+        } else if (difficulty <= 6) {
+            return { label: 'Średni', color: 'bg-yellow-100 text-yellow-800', icon: '🟡' };
+        } else if (difficulty <= 8) {
+            return { label: 'Trudny', color: 'bg-red-100 text-red-800', icon: '🔴' };
+        } else {
+            return { label: 'Expert', color: 'bg-purple-100 text-purple-800', icon: '🟣' };
+        }
+    };
+
     useEffect(() => {
         loadQuestion();
     }, [sessionId]);
@@ -57,13 +70,15 @@ export default function QuestionDisplay() {
 
             // Pokaż powiadomienie o zmianie poziomu trudności
             if (result.difficulty_changed) {
-                const difficultyDirection = result.new_difficulty > result.previous_difficulty ? 'wzrósł' : 'spadł';
+                const newDifficultyInfo = getDifficultyInfo(result.new_difficulty);
                 setDifficultyNotification({
-                    message: `Poziom trudności ${difficultyDirection}!`,
+                    level: newDifficultyInfo.label,
+                    color: newDifficultyInfo.color,
+                    icon: newDifficultyInfo.icon,
                     direction: result.new_difficulty > result.previous_difficulty ? 'up' : 'down'
                 });
-                // Ukryj powiadomienie po 2 sekundach
-                setTimeout(() => setDifficultyNotification(null), 2000);
+                // Ukryj powiadomienie po 2.5 sekundach
+                setTimeout(() => setDifficultyNotification(null), 2500);
             }
 
             setTimeout(() => {
@@ -108,9 +123,9 @@ export default function QuestionDisplay() {
                             <p className="text-sm text-gray-600">Pytanie {question.question_number}</p>
                             <div className="flex items-center gap-3 mt-1">
                                 <h2 className="text-2xl font-bold text-gray-800">{question.topic}</h2>
-                                {question.use_adaptive_difficulty && (
-                                    <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-full">
-                                        Poziom {question.current_difficulty?.toFixed(1)}
+                                {question.use_adaptive_difficulty && question.current_difficulty && (
+                                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getDifficultyInfo(question.current_difficulty).color}`}>
+                                        {getDifficultyInfo(question.current_difficulty).icon} {getDifficultyInfo(question.current_difficulty).label}
                                     </span>
                                 )}
                             </div>
@@ -157,20 +172,27 @@ export default function QuestionDisplay() {
                     </div>
                 </div>
 
-                {/* Difficulty Change Notification */}
+                {/* Difficulty Change Modal/Overlay */}
                 {difficultyNotification && (
-                    <div className={`rounded-2xl shadow-2xl p-4 mb-4 ${
-                        difficultyNotification.direction === 'up'
-                            ? 'bg-orange-100 border-2 border-orange-400'
-                            : 'bg-blue-100 border-2 border-blue-400'
-                    } animate-pulse`}>
-                        <p className={`text-lg font-bold text-center ${
-                            difficultyNotification.direction === 'up'
-                                ? 'text-orange-800'
-                                : 'text-blue-800'
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
+                        <div className={`${difficultyNotification.color} rounded-3xl shadow-2xl p-12 max-w-lg mx-4 transform animate-bounce border-4 ${
+                            difficultyNotification.direction === 'up' ? 'border-orange-500' : 'border-blue-500'
                         }`}>
-                            {difficultyNotification.direction === 'up' ? '📈' : '📉'} {difficultyNotification.message}
-                        </p>
+                            <div className="text-center">
+                                <div className="text-8xl mb-6 animate-pulse">
+                                    {difficultyNotification.direction === 'up' ? '📈' : '📉'}
+                                </div>
+                                <h2 className="text-4xl font-black mb-4">
+                                    Poziom trudności
+                                </h2>
+                                <div className="text-6xl font-black mb-4">
+                                    {difficultyNotification.icon} {difficultyNotification.level}
+                                </div>
+                                <p className="text-lg font-semibold opacity-80">
+                                    {difficultyNotification.direction === 'up' ? 'Świetnie Ci idzie!' : 'Nie poddawaj się!'}
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 )}
 

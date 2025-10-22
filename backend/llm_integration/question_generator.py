@@ -70,25 +70,25 @@ class QuestionGenerator:
 
         questions = [
             {
-                'question': f'What is the capital of France? (Topic: {topic}, Difficulty: {difficulty})',
+                'question': 'What is the capital of France?',
                 'correct_answer': 'Paris',
                 'wrong_answers': ['London', 'Berlin', 'Madrid'],
                 'explanation': 'Paris is the capital and largest city of France.'
             },
             {
-                'question': f'What is 2 + 2? (Topic: {topic}, Difficulty: {difficulty})',
+                'question': 'What is 2 + 2?',
                 'correct_answer': '4',
                 'wrong_answers': ['3', '5', '22'],
                 'explanation': 'Basic arithmetic: 2 + 2 equals 4.'
             },
             {
-                'question': f'What color is the sky on a clear day? (Topic: {topic}, Difficulty: {difficulty})',
+                'question': 'What color is the sky on a clear day?',
                 'correct_answer': 'Blue',
                 'wrong_answers': ['Green', 'Red', 'Yellow'],
                 'explanation': 'The sky appears blue due to Rayleigh scattering.'
             },
             {
-                'question': f'How many continents are there? (Topic: {topic}, Difficulty: {difficulty})',
+                'question': 'How many continents are there?',
                 'correct_answer': '7',
                 'wrong_answers': ['5', '6', '8'],
                 'explanation': 'There are 7 continents: Africa, Antarctica, Asia, Europe, North America, Australia, South America.'
