@@ -104,9 +104,16 @@ export default function QuestionDisplay() {
                 {/* Header */}
                 <div className="bg-white rounded-2xl shadow-2xl p-6 mb-4">
                     <div className="flex justify-between items-center">
-                        <div>
+                        <div className="flex-1">
                             <p className="text-sm text-gray-600">Pytanie {question.question_number}</p>
-                            <h2 className="text-2xl font-bold text-gray-800">{question.topic}</h2>
+                            <div className="flex items-center gap-3 mt-1">
+                                <h2 className="text-2xl font-bold text-gray-800">{question.topic}</h2>
+                                {question.use_adaptive_difficulty && (
+                                    <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-full">
+                                        Poziom {question.current_difficulty?.toFixed(1)}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <div className={`text-4xl font-bold ${
                             timeLeft <= 5 ? 'text-red-600 animate-pulse' : 'text-blue-600'

@@ -8,12 +8,20 @@ class QuizSessionSerializer(serializers.ModelSerializer):
     difficulty = serializers.CharField(source='initial_difficulty', read_only=True)
     score = serializers.IntegerField(source='correct_answers', read_only=True)
     completed_at = serializers.DateTimeField(source='ended_at', read_only=True)
+    is_custom = serializers.SerializerMethodField()
+
+    def get_is_custom(self, obj):
+        """Sprawdź czy quiz używał niestandardowych ustawień"""
+        return (obj.questions_count != 10 or
+                obj.time_per_question != 30 or
+                not obj.use_adaptive_difficulty)
 
     class Meta:
         model = QuizSession
         fields = ['id', 'username', 'topic', 'initial_difficulty', 'difficulty', 'current_difficulty',
                   'started_at', 'ended_at', 'completed_at', 'is_completed', 'total_questions',
-                  'correct_answers', 'score', 'current_streak', 'accuracy']
+                  'correct_answers', 'score', 'current_streak', 'accuracy', 'questions_count',
+                  'time_per_question', 'use_adaptive_difficulty', 'is_custom']
 
 
 class QuestionSerializer(serializers.ModelSerializer):
