@@ -1,5 +1,4 @@
-from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
+from openai import OpenAI
 import os
 import json
 
@@ -11,42 +10,45 @@ class QuestionGenerator:
         # Sprawdź czy klucz API jest ustawiony
         if not api_key or api_key == "sk-your-openai-api-key-here":
             print("⚠️  WARNING: OPENAI_API_KEY not set! Using fake questions.")
-            self.llm = None
+            self.client = None
         else:
             try:
-                self.llm = ChatOpenAI(
-                    model="gpt-4o-mini",
-                    api_key=api_key,
-                    temperature=0.7
-                )
+                self.client = OpenAI(api_key=api_key)
+                print("✅ OpenAI client initialized successfully!")
             except Exception as e:
                 print(f"⚠️  WARNING: Failed to initialize OpenAI: {e}")
-                self.llm = None
+                self.client = None
 
     def generate_question(self, topic, difficulty):
         # Jeśli brak API key, zwróć fake question
-        if self.llm is None:
+        if self.client is None:
             return self._generate_fake_question(topic, difficulty)
 
         try:
-            prompt = PromptTemplate(
-                input_variables=["topic", "difficulty"],
-                template="""
-                Wygeneruj pytanie quizowe na temat: {topic}
-                Poziom trudności: {difficulty} (skala 1-10)
+            prompt = f"""
+Wygeneruj pytanie quizowe na temat: {topic}
+Poziom trudności: {difficulty} (skala 1-10)
 
-                Zwróć odpowiedź TYLKO w formacie JSON (bez dodatkowego tekstu):
-                {{
-                    "question": "treść pytania",
-                    "correct_answer": "poprawna odpowiedź",
-                    "wrong_answers": ["błędna1", "błędna2", "błędna3"],
-                    "explanation": "krótkie uzasadnienie"
-                }}
-                """
+Zwróć odpowiedź TYLKO w formacie JSON (bez dodatkowego tekstu):
+{{
+    "question": "treść pytania po polsku",
+    "correct_answer": "poprawna odpowiedź",
+    "wrong_answers": ["błędna1", "błędna2", "błędna3"],
+    "explanation": "krótkie uzasadnienie po polsku"
+}}
+"""
+
+            response = self.client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "Jesteś ekspertem od tworzenia pytań quizowych. Zawsze odpowiadasz TYLKO w formacie JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=500
             )
 
-            response = self.llm.invoke(prompt.format(topic=topic, difficulty=difficulty))
-            content = response.content.strip()
+            content = response.choices[0].message.content.strip()
 
             # Usuń markdown code blocks
             if content.startswith("```json"):
