@@ -15,7 +15,7 @@ class QuestionGenerator:
         else:
             try:
                 self.llm = ChatOpenAI(
-                    model="gpt-4",
+                    model="gpt-4o-mini",
                     api_key=api_key,
                     temperature=0.7
                 )
