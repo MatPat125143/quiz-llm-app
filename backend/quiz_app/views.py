@@ -206,63 +206,36 @@ def start_quiz(request):
 
     # 🎯 FIXED DIFFICULTY: Wygeneruj WSZYSTKIE pytania na raz (różnorodne!)
     if not use_adaptive_difficulty:
-        print(f"📚 Fixed difficulty mode - finding/generating {questions_count} questions")
+        print(f"📚 Fixed difficulty mode - generating {questions_count} DIVERSE questions")
 
         try:
-            # KROK 1: Szukaj istniejących pytań w bazie z tego tematu i trudności
-            # na które użytkownik jeszcze nie odpowiadał
-            answered_question_ids = Answer.objects.filter(
-                user=request.user
-            ).values_list('question_id', flat=True)
+            # Wygeneruj WSZYSTKIE pytania jednocześnie z instrukcją o różnorodności
+            all_questions_data = generator.generate_multiple_questions(
+                topic,
+                initial_difficulty,
+                questions_count
+            )
 
-            existing_questions = Question.objects.filter(
-                session__topic__iexact=topic,
-                difficulty_level__gte=initial_difficulty - 0.5,
-                difficulty_level__lte=initial_difficulty + 0.5
-            ).exclude(
-                id__in=answered_question_ids
-            ).order_by('?')[:questions_count]  # Losowa kolejność
-
-            existing_count = existing_questions.count()
-            print(f"🔍 Znaleziono {existing_count} istniejących pytań w bazie")
-
-            # KROK 2: Powiąż znalezione pytania z sesją (nie kopiuj, tylko linkuj!)
-            # Nie robimy nic - pytania pozostają w swoich oryginalnych sesjach
-            # Będziemy je pobierać w get_question() bezpośrednio z bazy
-
-            # KROK 3: Jeśli potrzeba więcej pytań, wygeneruj brakującą liczbę
-            questions_to_generate = questions_count - existing_count
-
-            if questions_to_generate > 0:
-                print(f"🤖 Generuję {questions_to_generate} nowych różnorodnych pytań")
-
-                # Wygeneruj brakujące pytania
-                all_questions_data = generator.generate_multiple_questions(
-                    topic,
-                    initial_difficulty,
-                    questions_to_generate
+            # Zapisz każde pytanie z WYSOKIM progiem deduplikacji (0.98)
+            # Tylko prawie IDENTYCZNE pytania będą reużywane
+            # "pierwiastek z 49" ≠ "pierwiastek z 25" mimo 96% podobieństwa
+            created_count = 0
+            reused_count = 0
+            for question_data in all_questions_data:
+                question, created = _find_or_create_question(
+                    session,
+                    question_data,
+                    similarity_threshold=0.98  # Bardzo wysoki próg dla fixed mode
                 )
+                if created:
+                    created_count += 1
+                else:
+                    reused_count += 1
 
-                # Zapisz każde pytanie z WYSOKIM progiem deduplikacji (0.98)
-                created_count = 0
-                reused_count = 0
-                for question_data in all_questions_data:
-                    question, created = _find_or_create_question(
-                        session,
-                        question_data,
-                        similarity_threshold=0.98  # Bardzo wysoki próg dla fixed mode
-                    )
-                    if created:
-                        created_count += 1
-                    else:
-                        reused_count += 1
-
-                print(f"✅ Wygenerowano {questions_to_generate} pytań: {created_count} nowych, {reused_count} reużytych")
-            else:
-                print(f"✅ Wszystkie {questions_count} pytania znalezione w bazie - 0 wywołań API!")
+            print(f"✅ Pre-generated {len(all_questions_data)} questions: {created_count} new, {reused_count} reused")
 
         except Exception as e:
-            print(f"❌ Error finding/generating questions: {e}")
+            print(f"❌ Error pre-generating questions: {e}")
             # Fallback - będą generowane na bieżąco
 
     else:
@@ -298,21 +271,22 @@ def get_question(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 🎯 FIXED DIFFICULTY: Pobierz z BAZY (reużywanie pytań między graczami!)
+    # 🎯 FIXED DIFFICULTY: Pobierz z pre-generowanych pytań dla TEJ SESJI
     if not session.use_adaptive_difficulty:
-        # Pobierz pytania z CAŁEJ BAZY z tego tematu i trudności
-        # na które użytkownik jeszcze nie odpowiadał (globalnie, nie tylko w tej sesji)
-        answered_question_ids = Answer.objects.filter(
+        # WAŻNE: Pobieramy pytania TYLKO z tej sesji (pre-wygenerowane w start_quiz)
+        # oraz te które user jeszcze nie widział
+        answered_question_ids_in_session = Answer.objects.filter(
+            question__session=session,
             user=session.user
         ).values_list('question_id', flat=True)
 
+        # Pobierz pytania TYLKO z tej sesji, w kolejności created_at
+        # To zapewnia że każde pytanie jest unikalne w ramach quizu
         question = Question.objects.filter(
-            session__topic__iexact=session.topic,
-            difficulty_level__gte=session.current_difficulty - 0.5,
-            difficulty_level__lte=session.current_difficulty + 0.5
+            session=session  # TYLKO z tej sesji!
         ).exclude(
-            id__in=answered_question_ids
-        ).order_by('?').first()  # Losowa kolejność dla różnorodności
+            id__in=answered_question_ids_in_session
+        ).order_by('created_at').first()  # Deterministyczna kolejność
 
         if not question:
             # Brak pytań - prawdopodobnie błąd pre-generowania, wygeneruj fallback
