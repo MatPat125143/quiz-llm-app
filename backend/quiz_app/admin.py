@@ -195,9 +195,9 @@ class QuizSessionAdmin(admin.ModelAdmin):
             color = '#ef4444'  # Red
 
         return format_html(
-            '<span style="color: {}; font-weight: bold;">{:.1f}%</span>',
+            '<span style="color: {}; font-weight: bold;">{}%</span>',
             color,
-            accuracy
+            f'{accuracy:.1f}'
         )
     accuracy_badge.short_description = 'Accuracy'
     accuracy_badge.admin_order_field = 'correct_answers'
@@ -273,12 +273,12 @@ class QuizSessionAdmin(admin.ModelAdmin):
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    """Enhanced admin for Question model"""
+    """Enhanced admin for Question model with all answers displayed"""
 
     list_display = [
         'id',
         'question_preview',
-        'session_info',
+        'topic_display',
         'difficulty_display',
         'answer_count',
         'created_at'
@@ -287,23 +287,26 @@ class QuestionAdmin(admin.ModelAdmin):
     list_filter = [
         'difficulty_level',
         'created_at',
-        'session__initial_difficulty'
+        'session__initial_difficulty',
+        'session__topic'
     ]
 
     search_fields = [
-        'question_text',
-        'session__topic',
-        'session__user__email'
-    ]
-
-    readonly_fields = [
-        'session',
         'question_text',
         'correct_answer',
         'wrong_answer_1',
         'wrong_answer_2',
         'wrong_answer_3',
         'explanation',
+        'session__topic',
+        'session__user__email'
+    ]
+
+    readonly_fields = [
+        'session',
+        'question_text_display',
+        'all_answers_display',
+        'explanation_display',
         'difficulty_level',
         'created_at'
     ]
@@ -312,6 +315,8 @@ class QuestionAdmin(admin.ModelAdmin):
 
     ordering = ['-created_at']
 
+    list_per_page = 25
+
     inlines = [AnswerInline]
 
     fieldsets = (
@@ -319,15 +324,14 @@ class QuestionAdmin(admin.ModelAdmin):
             'fields': ('session',)
         }),
         ('Question', {
-            'fields': ('question_text', 'difficulty_level')
+            'fields': ('question_text_display', 'difficulty_level')
         }),
-        ('Answers', {
-            'fields': ('correct_answer', 'wrong_answer_1',
-                      'wrong_answer_2', 'wrong_answer_3')
+        ('All Answers', {
+            'fields': ('all_answers_display',),
+            'description': 'All answers with correct answer marked in green'
         }),
         ('Explanation', {
-            'fields': ('explanation',),
-            'classes': ('collapse',)
+            'fields': ('explanation_display',)
         }),
         ('Metadata', {
             'fields': ('created_at',),
@@ -345,15 +349,79 @@ class QuestionAdmin(admin.ModelAdmin):
         return text
     question_preview.short_description = 'Question'
 
-    def session_info(self, obj):
-        """Display session topic with link"""
+    def question_text_display(self, obj):
+        """Display full question text nicely formatted"""
         return format_html(
-            '<a href="/admin/quiz_app/quizsession/{}/change/">{}</a>',
-            obj.session.id,
-            obj.session.topic[:30] if len(obj.session.topic) > 30 else obj.session.topic
+            '<div style="padding: 10px; background-color: #f3f4f6; '
+            'border-left: 4px solid #3b82f6; border-radius: 4px; font-size: 14px;">'
+            '<strong>Question:</strong><br>{}'
+            '</div>',
+            obj.question_text
         )
-    session_info.short_description = 'Session Topic'
-    session_info.admin_order_field = 'session__topic'
+    question_text_display.short_description = 'Question Text'
+
+    def all_answers_display(self, obj):
+        """Display all answers with correct answer highlighted"""
+        answers = [
+            ('A', obj.correct_answer, True),
+            ('B', obj.wrong_answer_1, False),
+            ('C', obj.wrong_answer_2, False),
+            ('D', obj.wrong_answer_3, False)
+        ]
+
+        # Shuffle to match actual presentation, but we'll show in order with labels
+        html_parts = []
+        html_parts.append('<div style="margin-top: 10px;">')
+
+        for letter, answer, is_correct in answers:
+            if is_correct:
+                style = (
+                    'padding: 10px; margin: 5px 0; background-color: #d1fae5; '
+                    'border: 2px solid #10b981; border-radius: 4px; font-size: 14px;'
+                )
+                icon = '✓ CORRECT'
+                icon_color = '#10b981'
+            else:
+                style = (
+                    'padding: 10px; margin: 5px 0; background-color: #fee2e2; '
+                    'border: 1px solid #fecaca; border-radius: 4px; font-size: 14px;'
+                )
+                icon = '✗ Wrong'
+                icon_color = '#ef4444'
+
+            html_parts.append(
+                f'<div style="{style}">'
+                f'<span style="font-weight: bold; color: {icon_color};">[{icon}]</span> '
+                f'<strong>{letter}:</strong> {answer}'
+                f'</div>'
+            )
+
+        html_parts.append('</div>')
+        return format_html(''.join(html_parts))
+    all_answers_display.short_description = 'All Answers (Correct Answer Highlighted)'
+
+    def explanation_display(self, obj):
+        """Display explanation nicely formatted"""
+        return format_html(
+            '<div style="padding: 10px; background-color: #fef3c7; '
+            'border-left: 4px solid #f59e0b; border-radius: 4px; font-size: 14px;">'
+            '<strong>💡 Explanation:</strong><br>{}'
+            '</div>',
+            obj.explanation
+        )
+    explanation_display.short_description = 'Explanation'
+
+    def topic_display(self, obj):
+        """Display session topic with link"""
+        topic = obj.session.topic
+        return format_html(
+            '<a href="/admin/quiz_app/quizsession/{}/change/" title="{}">{}</a>',
+            obj.session.id,
+            topic,
+            topic[:30] + '...' if len(topic) > 30 else topic
+        )
+    topic_display.short_description = 'Topic'
+    topic_display.admin_order_field = 'session__topic'
 
     def difficulty_display(self, obj):
         """Display difficulty with color"""
@@ -366,22 +434,29 @@ class QuestionAdmin(admin.ModelAdmin):
             color = '#ef4444'  # Red (hard)
 
         return format_html(
-            '<span style="color: {}; font-weight: bold;">{:.1f}</span>',
+            '<span style="color: {}; font-weight: bold;">{}</span>',
             color,
-            level
+            f'{level:.1f}'
         )
     difficulty_display.short_description = 'Difficulty'
     difficulty_display.admin_order_field = 'difficulty_level'
 
     def answer_count(self, obj):
-        """Display number of answers"""
+        """Display number of user answers submitted"""
         count = obj.answers.count()
+        if count == 0:
+            return format_html('<span style="color: #9ca3af;">0 answers</span>')
+
+        correct_count = obj.answers.filter(is_correct=True).count()
+        wrong_count = count - correct_count
+
         return format_html(
-            '<span style="{}">{}x</span>',
-            'color: #10b981;' if count > 0 else '',
-            count
+            '<span style="color: #10b981;">✓ {}</span> / '
+            '<span style="color: #ef4444;">✗ {}</span>',
+            correct_count,
+            wrong_count
         )
-    answer_count.short_description = 'Answers'
+    answer_count.short_description = 'User Answers (✓/✗)'
 
     def has_add_permission(self, request):
         """Prevent manual addition - questions generated via API"""
@@ -500,9 +575,9 @@ class AnswerAdmin(admin.ModelAdmin):
             color = '#ef4444'  # Slow
 
         return format_html(
-            '<span style="color: {};">{:.1f}s</span>',
+            '<span style="color: {};">{}s</span>',
             color,
-            seconds
+            f'{seconds:.1f}'
         )
     response_time_display.short_description = 'Response Time'
     response_time_display.admin_order_field = 'response_time'
