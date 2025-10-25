@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getQuestion, submitAnswer, endQuiz } from '../services/api';
 import { useParams, useNavigate } from 'react-router-dom';
 
@@ -16,6 +16,9 @@ export default function QuestionDisplay() {
     const [startTime, setStartTime] = useState(null);
     const [error, setError] = useState('');
 
+    // Prevent duplicate loading in React StrictMode
+    const loadedRef = useRef(false);
+
     // Timer
     useEffect(() => {
         if (!answered && timeLeft > 0) {
@@ -26,10 +29,13 @@ export default function QuestionDisplay() {
         }
     }, [timeLeft, answered]);
 
-    // Load first question
+    // Load first question (only once, prevent React StrictMode duplicate)
     useEffect(() => {
-        loadQuestion();
-    }, [sessionId]);
+        if (!loadedRef.current) {
+            loadedRef.current = true;
+            loadQuestion();
+        }
+    }, []);
 
     const loadQuestion = async () => {
         try {
@@ -56,8 +62,8 @@ export default function QuestionDisplay() {
             console.error('Error loading question:', err);
 
             if (err.response?.status === 404) {
-                // Quiz zakończony
-                navigate(`/quiz/result/${sessionId}`);
+                // Quiz zakończony - przekieruj do szczegółów
+                navigate(`/quiz/details/${sessionId}`);
             } else {
                 setError('Nie udało się załadować pytania. Spróbuj ponownie.');
             }
@@ -96,7 +102,7 @@ export default function QuestionDisplay() {
 
             if (data.quiz_completed) {
                 setTimeout(() => {
-                    navigate(`/quiz/result/${sessionId}`);
+                    navigate(`/quiz/details/${sessionId}`);
                 }, 3000);
             }
         } catch (err) {
@@ -115,7 +121,7 @@ export default function QuestionDisplay() {
     const handleEndQuiz = async () => {
         try {
             await endQuiz(sessionId);
-            navigate(`/quiz/result/${sessionId}`);
+            navigate(`/quiz/details/${sessionId}`);
         } catch (err) {
             console.error('Error ending quiz:', err);
         }
