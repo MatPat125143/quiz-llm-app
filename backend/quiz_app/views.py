@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.core.cache import cache
+from django.db.models import Q, Count
 from .models import QuizSession, Question, Answer
 from .serializers import QuizSessionSerializer, QuestionSerializer
 from .permissions import IsQuizOwnerOrAdmin
@@ -14,6 +15,7 @@ import json
 import random
 import threading
 import time
+from difflib import SequenceMatcher
 
 # Inicjalizuj generator
 generator = QuestionGenerator()
@@ -72,6 +74,79 @@ def _prefetch_multiple_difficulties(session_id, topic, current_difficulty):
     # Prefetch dla łatwiejszego poziomu (-1.0)
     if current_difficulty > 1:
         _prefetch_next_question(session_id, topic, max(current_difficulty - 1.0, 1.0))
+
+
+def _similarity_ratio(text1, text2):
+    """Oblicza podobieństwo między dwoma tekstami (0.0 - 1.0)"""
+    return SequenceMatcher(None, text1.lower(), text2.lower()).ratio()
+
+
+def _find_similar_question(question_text, topic, difficulty, threshold=0.85):
+    """
+    Szuka podobnego pytania w bazie danych.
+
+    Args:
+        question_text: Tekst nowego pytania
+        topic: Temat pytania
+        difficulty: Poziom trudności
+        threshold: Próg podobieństwa (0.85 = 85% podobne)
+
+    Returns:
+        Question object jeśli znaleziono podobne pytanie, inaczej None
+    """
+    # Szukaj pytań z tego samego tematu i podobnego poziomu trudności (+/- 1.0)
+    similar_difficulty_questions = Question.objects.filter(
+        session__topic__iexact=topic,
+        difficulty_level__gte=difficulty - 1.0,
+        difficulty_level__lte=difficulty + 1.0
+    ).select_related('session')[:100]  # Ogranicz do 100 ostatnich
+
+    # Sprawdź podobieństwo tekstu
+    for existing_question in similar_difficulty_questions:
+        similarity = _similarity_ratio(question_text, existing_question.question_text)
+
+        if similarity >= threshold:
+            print(f"🔄 Znaleziono podobne pytanie (similarity: {similarity:.2f})")
+            print(f"   Nowe: {question_text[:60]}...")
+            print(f"   Istniejące: {existing_question.question_text[:60]}...")
+            return existing_question
+
+    return None
+
+
+def _find_or_create_question(session, question_data):
+    """
+    Znajduje istniejące podobne pytanie lub tworzy nowe.
+    Zapobiega duplikatom w bazie danych.
+
+    Returns:
+        tuple: (Question object, created: bool)
+    """
+    # Sprawdź czy podobne pytanie już istnieje
+    existing_question = _find_similar_question(
+        question_data['question'],
+        session.topic,
+        session.current_difficulty
+    )
+
+    if existing_question:
+        # Użyj istniejącego pytania - NIE TWORZYMY DUPLIKATU!
+        print(f"✅ Używam istniejącego pytania ID={existing_question.id}")
+        return existing_question, False
+
+    # Nie znaleziono - utwórz nowe pytanie
+    new_question = Question.objects.create(
+        session=session,
+        question_text=question_data['question'],
+        correct_answer=question_data['correct_answer'],
+        wrong_answer_1=question_data['wrong_answers'][0],
+        wrong_answer_2=question_data['wrong_answers'][1],
+        wrong_answer_3=question_data['wrong_answers'][2],
+        explanation=question_data['explanation'],
+        difficulty_level=session.current_difficulty
+    )
+    print(f"📝 Utworzono nowe pytanie ID={new_question.id}")
+    return new_question, True
 
 
 @api_view(['POST'])
@@ -171,17 +246,11 @@ def get_question(request, session_id):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    # Zapisz pytanie w bazie
-    question = Question.objects.create(
-        session=session,
-        question_text=question_data['question'],
-        correct_answer=question_data['correct_answer'],
-        wrong_answer_1=question_data['wrong_answers'][0],
-        wrong_answer_2=question_data['wrong_answers'][1],
-        wrong_answer_3=question_data['wrong_answers'][2],
-        explanation=question_data['explanation'],
-        difficulty_level=session.current_difficulty
-    )
+    # Znajdź istniejące podobne pytanie lub utwórz nowe (deduplikacja!)
+    question, created = _find_or_create_question(session, question_data)
+
+    if not created:
+        generation_status = "reused_existing"
 
     answers = [
         question.correct_answer,
@@ -498,4 +567,91 @@ def quiz_details(request, session_id):
         'use_adaptive_difficulty': session.use_adaptive_difficulty,
         'is_custom': is_custom,
         'questions': questions_data
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def questions_library(request):
+    """
+    API endpoint do przeglądania wszystkich pytań z filtrowaniem i wyszukiwaniem.
+    Używany przez frontend do wyświetlenia biblioteki pytań.
+    """
+    questions = Question.objects.all().select_related('session').prefetch_related('answers')
+
+    # Filtracja po temacie
+    topic = request.GET.get('topic')
+    if topic:
+        questions = questions.filter(session__topic__icontains=topic)
+
+    # Filtracja po poziomie trudności
+    difficulty_min = request.GET.get('difficulty_min')
+    difficulty_max = request.GET.get('difficulty_max')
+    if difficulty_min:
+        questions = questions.filter(difficulty_level__gte=float(difficulty_min))
+    if difficulty_max:
+        questions = questions.filter(difficulty_level__lte=float(difficulty_max))
+
+    # Wyszukiwanie po tekście pytania lub odpowiedziach
+    search = request.GET.get('search')
+    if search:
+        questions = questions.filter(
+            Q(question_text__icontains=search) |
+            Q(correct_answer__icontains=search) |
+            Q(wrong_answer_1__icontains=search) |
+            Q(wrong_answer_2__icontains=search) |
+            Q(wrong_answer_3__icontains=search) |
+            Q(explanation__icontains=search)
+        )
+
+    # Unikalne tematy (dla filtra)
+    if request.GET.get('get_topics') == 'true':
+        topics = Question.objects.values_list('session__topic', flat=True).distinct()
+        return Response({'topics': list(topics)})
+
+    # Sortowanie
+    order_by = request.GET.get('order_by', '-created_at')
+    allowed_sorts = ['created_at', '-created_at', 'difficulty_level', '-difficulty_level']
+    if order_by in allowed_sorts:
+        questions = questions.order_by(order_by)
+
+    # Paginacja
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+
+    total_count = questions.count()
+    questions = questions[(page - 1) * page_size:page * page_size]
+
+    # Przygotuj dane
+    questions_data = []
+    for q in questions:
+        # Policz statystyki odpowiedzi
+        total_answers = q.answers.count()
+        correct_answers_count = q.answers.filter(is_correct=True).count()
+        wrong_answers_count = total_answers - correct_answers_count
+
+        questions_data.append({
+            'id': q.id,
+            'question_text': q.question_text,
+            'topic': q.session.topic,
+            'difficulty_level': round(q.difficulty_level, 1),
+            'correct_answer': q.correct_answer,
+            'wrong_answer_1': q.wrong_answer_1,
+            'wrong_answer_2': q.wrong_answer_2,
+            'wrong_answer_3': q.wrong_answer_3,
+            'explanation': q.explanation,
+            'created_at': q.created_at,
+            'stats': {
+                'total_answers': total_answers,
+                'correct_answers': correct_answers_count,
+                'wrong_answers': wrong_answers_count,
+                'accuracy': round((correct_answers_count / total_answers * 100), 1) if total_answers > 0 else 0
+            }
+        })
+
+    return Response({
+        'count': total_count,
+        'next': page * page_size < total_count,
+        'previous': page > 1,
+        'results': questions_data
     })
