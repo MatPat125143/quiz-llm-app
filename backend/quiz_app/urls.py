@@ -8,4 +8,5 @@ urlpatterns = [
     path('end/<int:session_id>/', views.end_quiz),
     path('history/', views.quiz_history),
     path('details/<int:session_id>/', views.quiz_details),
+    path('questions/', views.questions_library),  # Biblioteka pytań
 ]

@@ -9,6 +9,7 @@ import QuestionDisplay from './components/QuestionDisplay';
 import QuizDetails from './components/QuizDetails';
 import QuizHistory from './components/QuizHistory';
 import UserProfile from './components/UserProfile';
+import QuestionsLibrary from './components/QuestionsLibrary';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -66,6 +67,12 @@ function App() {
                 <Route path="/quiz/history" element={
                     <ProtectedRoute>
                         <QuizHistory />
+                    </ProtectedRoute>
+                } />
+
+                <Route path="/quiz/questions" element={
+                    <ProtectedRoute>
+                        <QuestionsLibrary />
                     </ProtectedRoute>
                 } />
             </Routes>

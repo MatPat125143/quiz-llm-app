@@ -133,13 +133,19 @@ export default function UserDashboard() {
                     </div>
                 </div>
 
-                {/* Start Quiz Button */}
-                <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Action Buttons */}
+                <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
                     <button
                         onClick={() => navigate('/quiz/setup')}
                         className="bg-gradient-to-r from-green-500 to-blue-500 text-white py-6 rounded-2xl hover:from-green-600 hover:to-blue-600 transition shadow-lg font-bold text-2xl"
                     >
                         🚀 Rozpocznij nowy quiz
+                    </button>
+                    <button
+                        onClick={() => navigate('/quiz/questions')}
+                        className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white py-6 rounded-2xl hover:from-yellow-600 hover:to-orange-600 transition shadow-lg font-bold text-2xl"
+                    >
+                        📖 Biblioteka pytań
                     </button>
                     <button
                         onClick={() => navigate('/quiz/history')}

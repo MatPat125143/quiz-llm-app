@@ -163,6 +163,11 @@ export const getQuizDetails = async (sessionId) => {
     return response.data;
 };
 
+export const getQuestionsLibrary = async (params = {}) => {
+    const response = await api.get('/quiz/questions/', { params });
+    return response.data;
+};
+
 // ==================== ADMIN ====================
 
 export const getAdminDashboard = async () => {
