@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.core.cache import cache
 from .models import QuizSession, Question, Answer
 from .serializers import QuizSessionSerializer, QuestionSerializer
 from .permissions import IsQuizOwnerOrAdmin
@@ -11,10 +12,66 @@ from llm_integration.question_generator import QuestionGenerator
 from llm_integration.difficulty_adapter import DifficultyAdapter
 import json
 import random
+import threading
+import time
 
-# Inicjalizuj generator (bezpieczny - używa fake questions jeśli brak API key)
+# Inicjalizuj generator
 generator = QuestionGenerator()
 difficulty_adapter = DifficultyAdapter()
+
+
+def _get_next_question_cache_key(session_id, difficulty):
+    """Klucz cache dla następnego pytania"""
+    # Zaokrąglij trudność do 1 miejsca po przecinku dla lepszego cache hit rate
+    difficulty_rounded = round(difficulty, 1)
+    return f"next_question_{session_id}_{difficulty_rounded}"
+
+
+def _prefetch_next_question(session_id, topic, difficulty):
+    """
+    Generuj i cache'uj następne pytanie w tle.
+    Działa w osobnym wątku, żeby nie blokować odpowiedzi.
+    """
+    cache_key = _get_next_question_cache_key(session_id, difficulty)
+
+    # Jeśli już jest w cache, nie generuj ponownie
+    if cache.get(cache_key):
+        print(f"✅ Pytanie już w cache (difficulty: {difficulty})")
+        return
+
+    try:
+        print(f"🔄 Rozpoczynam prefetch pytania (session: {session_id}, difficulty: {difficulty})")
+        start_time = time.time()
+
+        # Wygeneruj pytanie
+        question_data = generator.generate_question(topic, difficulty)
+
+        elapsed = time.time() - start_time
+        print(f"✅ Pytanie wygenerowane w {elapsed:.2f}s")
+
+        # Zapisz w cache na 10 minut
+        cache.set(cache_key, question_data, timeout=600)
+        print(f"📦 Pytanie zapisane w cache: {cache_key}")
+
+    except Exception as e:
+        print(f"❌ Error podczas prefetch: {e}")
+
+
+def _prefetch_multiple_difficulties(session_id, topic, current_difficulty):
+    """
+    Prefetch pytań dla różnych poziomów trudności.
+    Zwiększa szansę na cache hit gdy trudność się zmieni.
+    """
+    # Prefetch dla obecnej trudności
+    _prefetch_next_question(session_id, topic, current_difficulty)
+
+    # Prefetch dla trudniejszego poziomu (+1.0)
+    if current_difficulty < 10:
+        _prefetch_next_question(session_id, topic, min(current_difficulty + 1.0, 10.0))
+
+    # Prefetch dla łatwiejszego poziomu (-1.0)
+    if current_difficulty > 1:
+        _prefetch_next_question(session_id, topic, max(current_difficulty - 1.0, 1.0))
 
 
 @api_view(['POST'])
@@ -52,6 +109,15 @@ def start_quiz(request):
     profile.total_quizzes_played += 1
     profile.save()
 
+    # 🚀 PREFETCH: Wygeneruj pierwsze pytanie w tle
+    thread = threading.Thread(
+        target=_prefetch_multiple_difficulties,
+        args=(session.id, topic, initial_difficulty)
+    )
+    thread.daemon = True
+    thread.start()
+    print(f"🔄 Prefetch pierwszego pytania uruchomiony (session: {session.id})")
+
     return Response({
         'session_id': session.id,
         'message': 'Quiz started successfully!',
@@ -75,12 +141,37 @@ def get_question(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # Generuj pytanie (użyje LLM jeśli dostępny, inaczej fake)
-    question_data = generator.generate_question(
-        session.topic,
-        session.current_difficulty
-    )
+    # 🚀 SPRÓBUJ POBRAĆ Z CACHE
+    cache_key = _get_next_question_cache_key(session_id, session.current_difficulty)
+    question_data = cache.get(cache_key)
 
+    if question_data:
+        # Pytanie gotowe w cache - instant!
+        cache.delete(cache_key)  # Usuń z cache po użyciu
+        print(f"⚡ Pytanie pobrane z cache (instant!) - difficulty: {session.current_difficulty}")
+        generation_status = "cached"
+    else:
+        # Fallback - czekamy na generowanie
+        print(f"⏳ Cache miss - generuję pytanie synchronicznie (difficulty: {session.current_difficulty})")
+
+        try:
+            start_time = time.time()
+            question_data = generator.generate_question(
+                session.topic,
+                session.current_difficulty
+            )
+            elapsed = time.time() - start_time
+            print(f"✅ Pytanie wygenerowane w {elapsed:.2f}s")
+            generation_status = f"generated_in_{elapsed:.1f}s"
+
+        except Exception as e:
+            print(f"❌ Błąd podczas generowania: {e}")
+            return Response(
+                {'error': 'Failed to generate question. Please try again.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    # Zapisz pytanie w bazie
     question = Question.objects.create(
         session=session,
         question_text=question_data['question'],
@@ -100,10 +191,6 @@ def get_question(request, session_id):
     ]
     random.shuffle(answers)
 
-    # Don't increment total_questions here - do it in submit_answer
-    # This prevents double-counting if the question is fetched multiple times
-    # (e.g., due to React StrictMode in development)
-
     # Map answers to option letters A, B, C, D
     option_mapping = {}
     for i, answer in enumerate(answers):
@@ -120,9 +207,10 @@ def get_question(request, session_id):
         'option_c': answers[2],
         'option_d': answers[3],
         'current_difficulty': session.current_difficulty,
-        'question_number': session.total_questions + 1,  # Next question number
+        'question_number': session.total_questions + 1,
         'time_per_question': session.time_per_question,
-        'use_adaptive_difficulty': session.use_adaptive_difficulty
+        'use_adaptive_difficulty': session.use_adaptive_difficulty,
+        'generation_status': generation_status  # Debug info
     })
 
 
@@ -170,7 +258,6 @@ def submit_answer(request):
     )
 
     # Increment total_questions AFTER user submits answer
-    # This ensures accurate counting even with React StrictMode
     session.total_questions += 1
 
     if is_correct:
@@ -199,10 +286,12 @@ def submit_answer(request):
 
         if new_difficulty != session.current_difficulty:
             difficulty_changed = True
+            print(f"🎯 Trudność zmieniona: {session.current_difficulty} → {new_difficulty}")
             session.current_difficulty = new_difficulty
 
     session.save()
 
+    # Zaktualizuj statystyki użytkownika
     profile = request.user.profile
     profile.total_questions_answered += 1
     if is_correct:
@@ -211,13 +300,24 @@ def submit_answer(request):
         profile.highest_streak = session.current_streak
     profile.save()
 
-    # Check if quiz should be completed (after reaching questions_count)
+    # Check if quiz should be completed
     quiz_completed = session.total_questions >= session.questions_count
 
     if quiz_completed and not session.is_completed:
         session.ended_at = timezone.now()
         session.is_completed = True
         session.save()
+        print(f"🏁 Quiz zakończony (session: {session.id})")
+    else:
+        # 🚀 PREFETCH: Generuj następne pytania W TLE
+        # Uruchom w osobnym wątku, żeby nie blokować odpowiedzi
+        thread = threading.Thread(
+            target=_prefetch_multiple_difficulties,
+            args=(session.id, session.topic, session.current_difficulty)
+        )
+        thread.daemon = True
+        thread.start()
+        print(f"🔄 Prefetch następnych pytań uruchomiony (difficulty: {session.current_difficulty})")
 
     return Response({
         'is_correct': is_correct,
