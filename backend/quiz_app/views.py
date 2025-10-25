@@ -114,11 +114,17 @@ def _find_similar_question(question_text, topic, difficulty, threshold=0.85):
     return None
 
 
-def _find_or_create_question(session, question_data):
+def _find_or_create_question(session, question_data, similarity_threshold=0.85):
     """
     Znajduje istniejące podobne pytanie lub tworzy nowe.
     Zapobiega duplikatom w bazie danych.
     WAŻNE: Sprawdza też czy użytkownik już odpowiadał na to pytanie w tej sesji!
+
+    Args:
+        session: QuizSession object
+        question_data: dict with question data
+        similarity_threshold: float (0.0-1.0) - próg podobieństwa dla deduplication
+                             Wyższy = bardziej restrykcyjny (tylko prawie identyczne pytania)
 
     Returns:
         tuple: (Question object, created: bool)
@@ -127,7 +133,8 @@ def _find_or_create_question(session, question_data):
     existing_question = _find_similar_question(
         question_data['question'],
         session.topic,
-        session.current_difficulty
+        session.current_difficulty,
+        threshold=similarity_threshold
     )
 
     if existing_question:
@@ -208,11 +215,17 @@ def start_quiz(request):
                 questions_count
             )
 
-            # Zapisz każde pytanie z deduplikacją
+            # Zapisz każde pytanie z WYSOKIM progiem deduplikacji (0.98)
+            # Tylko prawie IDENTYCZNE pytania będą reużywane
+            # "pierwiastek z 49" ≠ "pierwiastek z 25" mimo 96% podobieństwa
             created_count = 0
             reused_count = 0
             for question_data in all_questions_data:
-                question, created = _find_or_create_question(session, question_data)
+                question, created = _find_or_create_question(
+                    session,
+                    question_data,
+                    similarity_threshold=0.98  # Bardzo wysoki próg dla fixed mode
+                )
                 if created:
                     created_count += 1
                 else:
@@ -279,7 +292,11 @@ def get_question(request, session_id):
                     session.topic,
                     session.current_difficulty
                 )
-                question, created = _find_or_create_question(session, question_data)
+                question, created = _find_or_create_question(
+                    session,
+                    question_data,
+                    similarity_threshold=0.98  # Wysoki próg też dla fallback w fixed mode
+                )
                 generation_status = "fallback_generated"
             except Exception as e:
                 print(f"❌ Błąd podczas generowania fallback: {e}")
@@ -323,6 +340,8 @@ def get_question(request, session_id):
                 )
 
         # Znajdź istniejące podobne pytanie lub utwórz nowe (deduplikacja!)
+        # W adaptive mode używamy niższego progu (0.85 - default)
+        # bo pytania są generowane pojedynczo i częściej chcemy reużywać
         question, created = _find_or_create_question(session, question_data)
 
         if not created:
