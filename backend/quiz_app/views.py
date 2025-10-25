@@ -197,14 +197,42 @@ def start_quiz(request):
     profile.total_quizzes_played += 1
     profile.save()
 
-    # 🚀 PREFETCH: Wygeneruj pierwsze pytanie w tle
-    thread = threading.Thread(
-        target=_prefetch_multiple_difficulties,
-        args=(session.id, topic, initial_difficulty)
-    )
-    thread.daemon = True
-    thread.start()
-    print(f"🔄 Prefetch pierwszego pytania uruchomiony (session: {session.id})")
+    # 🎯 FIXED DIFFICULTY: Wygeneruj WSZYSTKIE pytania na raz (różnorodne!)
+    if not use_adaptive_difficulty:
+        print(f"📚 Fixed difficulty mode - generating {questions_count} DIVERSE questions at once")
+        try:
+            # Wygeneruj wszystkie pytania jednocześnie z instrukcją o różnorodności
+            all_questions_data = generator.generate_multiple_questions(
+                topic,
+                initial_difficulty,
+                questions_count
+            )
+
+            # Zapisz każde pytanie z deduplikacją
+            created_count = 0
+            reused_count = 0
+            for question_data in all_questions_data:
+                question, created = _find_or_create_question(session, question_data)
+                if created:
+                    created_count += 1
+                else:
+                    reused_count += 1
+
+            print(f"✅ Pre-generated {len(all_questions_data)} questions: {created_count} new, {reused_count} reused")
+
+        except Exception as e:
+            print(f"❌ Error pre-generating questions: {e}")
+            # Fallback - będą generowane na bieżąco
+
+    else:
+        # 🚀 ADAPTIVE DIFFICULTY: PREFETCH pierwszego pytania w tle
+        thread = threading.Thread(
+            target=_prefetch_multiple_difficulties,
+            args=(session.id, topic, initial_difficulty)
+        )
+        thread.daemon = True
+        thread.start()
+        print(f"🔄 Prefetch pierwszego pytania uruchomiony (session: {session.id})")
 
     return Response({
         'session_id': session.id,
@@ -229,41 +257,76 @@ def get_question(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 🚀 SPRÓBUJ POBRAĆ Z CACHE
-    cache_key = _get_next_question_cache_key(session_id, session.current_difficulty)
-    question_data = cache.get(cache_key)
+    # 🎯 FIXED DIFFICULTY: Pobierz z pre-generowanych pytań
+    if not session.use_adaptive_difficulty:
+        # Pobierz pytania z tej sesji, na które użytkownik jeszcze nie odpowiedział
+        answered_question_ids = Answer.objects.filter(
+            question__session=session,
+            user=session.user
+        ).values_list('question_id', flat=True)
 
-    if question_data:
-        # Pytanie gotowe w cache - instant!
-        cache.delete(cache_key)  # Usuń z cache po użyciu
-        print(f"⚡ Pytanie pobrane z cache (instant!) - difficulty: {session.current_difficulty}")
-        generation_status = "cached"
+        question = Question.objects.filter(
+            session=session
+        ).exclude(
+            id__in=answered_question_ids
+        ).order_by('created_at').first()
+
+        if not question:
+            # Brak pytań - prawdopodobnie błąd pre-generowania, wygeneruj fallback
+            print(f"⚠️ No pre-generated questions found - generating fallback")
+            try:
+                question_data = generator.generate_question(
+                    session.topic,
+                    session.current_difficulty
+                )
+                question, created = _find_or_create_question(session, question_data)
+                generation_status = "fallback_generated"
+            except Exception as e:
+                print(f"❌ Błąd podczas generowania fallback: {e}")
+                return Response(
+                    {'error': 'Failed to generate question. Please try again.'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        else:
+            print(f"📖 Fetched pre-generated question ID={question.id}")
+            generation_status = "pre_generated"
+
+    # 🚀 ADAPTIVE DIFFICULTY: SPRÓBUJ POBRAĆ Z CACHE
     else:
-        # Fallback - czekamy na generowanie
-        print(f"⏳ Cache miss - generuję pytanie synchronicznie (difficulty: {session.current_difficulty})")
+        cache_key = _get_next_question_cache_key(session_id, session.current_difficulty)
+        question_data = cache.get(cache_key)
 
-        try:
-            start_time = time.time()
-            question_data = generator.generate_question(
-                session.topic,
-                session.current_difficulty
-            )
-            elapsed = time.time() - start_time
-            print(f"✅ Pytanie wygenerowane w {elapsed:.2f}s")
-            generation_status = f"generated_in_{elapsed:.1f}s"
+        if question_data:
+            # Pytanie gotowe w cache - instant!
+            cache.delete(cache_key)  # Usuń z cache po użyciu
+            print(f"⚡ Pytanie pobrane z cache (instant!) - difficulty: {session.current_difficulty}")
+            generation_status = "cached"
+        else:
+            # Fallback - czekamy na generowanie
+            print(f"⏳ Cache miss - generuję pytanie synchronicznie (difficulty: {session.current_difficulty})")
 
-        except Exception as e:
-            print(f"❌ Błąd podczas generowania: {e}")
-            return Response(
-                {'error': 'Failed to generate question. Please try again.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            try:
+                start_time = time.time()
+                question_data = generator.generate_question(
+                    session.topic,
+                    session.current_difficulty
+                )
+                elapsed = time.time() - start_time
+                print(f"✅ Pytanie wygenerowane w {elapsed:.2f}s")
+                generation_status = f"generated_in_{elapsed:.1f}s"
 
-    # Znajdź istniejące podobne pytanie lub utwórz nowe (deduplikacja!)
-    question, created = _find_or_create_question(session, question_data)
+            except Exception as e:
+                print(f"❌ Błąd podczas generowania: {e}")
+                return Response(
+                    {'error': 'Failed to generate question. Please try again.'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
-    if not created:
-        generation_status = "reused_existing"
+        # Znajdź istniejące podobne pytanie lub utwórz nowe (deduplikacja!)
+        question, created = _find_or_create_question(session, question_data)
+
+        if not created:
+            generation_status = "reused_existing"
 
     answers = [
         question.correct_answer,

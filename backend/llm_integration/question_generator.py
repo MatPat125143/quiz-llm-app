@@ -29,6 +29,105 @@ class QuestionGenerator:
         except Exception as e:
             print(f"⚠️  Failed to initialize OpenAI: {e}")
 
+    def generate_multiple_questions(self, topic, difficulty, count):
+        """
+        Generuje wiele RÓŻNORODNYCH pytań na raz.
+        Używane dla stałych poziomów trudności.
+
+        Args:
+            topic (str): Temat pytań (np. "Matematyka", "Historia")
+            difficulty (float): Poziom trudności 1-10
+            count (int): Ile pytań wygenerować
+
+        Returns:
+            list: Lista słowników z pytaniami
+        """
+        # Jeśli brak klienta OpenAI, użyj fake questions
+        if self.client is None:
+            print(f"📝 Generating {count} fallback questions for topic: {topic}, difficulty: {difficulty}")
+            return [self._generate_fallback_question(topic, difficulty) for _ in range(count)]
+
+        # Generuj pytania używając OpenAI
+        try:
+            print(f"🤖 Generating {count} DIVERSE AI questions for topic: {topic}, difficulty: {difficulty}")
+            return self._generate_multiple_ai_questions(topic, difficulty, count)
+        except Exception as e:
+            print(f"❌ Error generating multiple AI questions: {e}")
+            print(f"📝 Falling back to predefined questions")
+            return [self._generate_fallback_question(topic, difficulty) for _ in range(count)]
+
+    def _generate_multiple_ai_questions(self, topic, difficulty, count):
+        """Generuje wiele różnorodnych pytań używając OpenAI API"""
+
+        # Przygotuj prompt dla AI - WAŻNE: podkreśl różnorodność!
+        system_prompt = """Jesteś ekspertem od tworzenia pytań edukacyjnych.
+Tworzysz pytania quizowe w języku polskim.
+ZAWSZE odpowiadasz w formacie JSON bez dodatkowego tekstu.
+WAŻNE: Pytania muszą być RÓŻNORODNE i dotyczyć RÓŻNYCH aspektów tematu!"""
+
+        user_prompt = f"""Wygeneruj {count} RÓŻNORODNYCH pytań quizowych:
+- Temat: {topic}
+- Poziom trudności: {difficulty}/10
+- WAŻNE: Każde pytanie musi dotyczyć INNEGO aspektu tematu!
+- WAŻNE: Unikaj powtarzania tego samego typu pytań!
+- WAŻNE: Zmień kontekst, liczby, przykłady w każdym pytaniu!
+
+Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
+[
+  {{
+    "question": "treść pytania 1 po polsku",
+    "correct_answer": "poprawna odpowiedź 1",
+    "wrong_answers": ["błędna 1.1", "błędna 1.2", "błędna 1.3"],
+    "explanation": "krótkie wyjaśnienie 1 po polsku"
+  }},
+  {{
+    "question": "treść pytania 2 po polsku (INNY aspekt tematu!)",
+    "correct_answer": "poprawna odpowiedź 2",
+    "wrong_answers": ["błędna 2.1", "błędna 2.2", "błędna 2.3"],
+    "explanation": "krótkie wyjaśnienie 2 po polsku"
+  }}
+  ... (pozostałe pytania)
+]"""
+
+        # Wywołaj OpenAI API z większym max_tokens dla wielu pytań
+        response = self.client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.9,  # Wyższa temperatura = więcej różnorodności
+            max_tokens=2000  # Więcej tokenów dla wielu pytań
+        )
+
+        # Pobierz odpowiedź
+        content = response.choices[0].message.content.strip()
+
+        # Oczyść odpowiedź z markdown code blocks
+        content = self._clean_json_response(content)
+
+        # Parsuj JSON
+        questions_data = json.loads(content)
+
+        # Waliduj strukturę
+        if not isinstance(questions_data, list):
+            raise ValueError(f"Expected list of questions, got: {type(questions_data)}")
+
+        if len(questions_data) != count:
+            print(f"⚠️ Requested {count} questions but got {len(questions_data)}")
+
+        # Waliduj każde pytanie
+        for i, q_data in enumerate(questions_data):
+            required_keys = ["question", "correct_answer", "wrong_answers", "explanation"]
+            if not all(key in q_data for key in required_keys):
+                raise ValueError(f"Question {i+1} missing required keys. Got: {q_data.keys()}")
+
+            if len(q_data["wrong_answers"]) != 3:
+                raise ValueError(f"Question {i+1} has {len(q_data['wrong_answers'])} wrong answers, expected 3")
+
+        print(f"✅ Generated {len(questions_data)} diverse AI questions successfully")
+        return questions_data
+
     def generate_question(self, topic, difficulty):
         """
         Generuje pytanie quizowe
