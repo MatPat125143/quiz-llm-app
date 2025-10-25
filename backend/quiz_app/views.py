@@ -206,9 +206,10 @@ def start_quiz(request):
 
     # 🎯 FIXED DIFFICULTY: Wygeneruj WSZYSTKIE pytania na raz (różnorodne!)
     if not use_adaptive_difficulty:
-        print(f"📚 Fixed difficulty mode - generating {questions_count} DIVERSE questions at once")
+        print(f"📚 Fixed difficulty mode - generating {questions_count} DIVERSE questions")
+
         try:
-            # Wygeneruj wszystkie pytania jednocześnie z instrukcją o różnorodności
+            # Wygeneruj WSZYSTKIE pytania jednocześnie z instrukcją o różnorodności
             all_questions_data = generator.generate_multiple_questions(
                 topic,
                 initial_difficulty,
@@ -270,19 +271,22 @@ def get_question(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 🎯 FIXED DIFFICULTY: Pobierz z pre-generowanych pytań
+    # 🎯 FIXED DIFFICULTY: Pobierz z pre-generowanych pytań dla TEJ SESJI
     if not session.use_adaptive_difficulty:
-        # Pobierz pytania z tej sesji, na które użytkownik jeszcze nie odpowiedział
-        answered_question_ids = Answer.objects.filter(
+        # WAŻNE: Pobieramy pytania TYLKO z tej sesji (pre-wygenerowane w start_quiz)
+        # oraz te które user jeszcze nie widział
+        answered_question_ids_in_session = Answer.objects.filter(
             question__session=session,
             user=session.user
         ).values_list('question_id', flat=True)
 
+        # Pobierz pytania TYLKO z tej sesji, w kolejności created_at
+        # To zapewnia że każde pytanie jest unikalne w ramach quizu
         question = Question.objects.filter(
-            session=session
+            session=session  # TYLKO z tej sesji!
         ).exclude(
-            id__in=answered_question_ids
-        ).order_by('created_at').first()
+            id__in=answered_question_ids_in_session
+        ).order_by('created_at').first()  # Deterministyczna kolejność
 
         if not question:
             # Brak pytań - prawdopodobnie błąd pre-generowania, wygeneruj fallback
