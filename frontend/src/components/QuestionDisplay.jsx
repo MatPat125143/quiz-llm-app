@@ -11,7 +11,6 @@ export default function QuestionDisplay() {
     const [answered, setAnswered] = useState(false);
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [loadingNextQuestion, setLoadingNextQuestion] = useState(false);
     const [timeLeft, setTimeLeft] = useState(30);
     const [startTime, setStartTime] = useState(null);
     const [error, setError] = useState('');
@@ -100,11 +99,18 @@ export default function QuestionDisplay() {
 
             setResult(data);
 
-            if (data.quiz_completed) {
-                setTimeout(() => {
+            // Automatically load next question after 3 seconds
+            setTimeout(() => {
+                if (data.quiz_completed) {
                     navigate(`/quiz/details/${sessionId}`);
-                }, 3000);
-            }
+                } else {
+                    // Auto-load next question
+                    setAnswered(false);
+                    setSelectedAnswer(null);
+                    setResult(null);
+                    loadQuestion();
+                }
+            }, 3000);
         } catch (err) {
             console.error('Error submitting answer:', err);
             setError('Nie udało się zapisać odpowiedzi. Spróbuj ponownie.');
@@ -112,20 +118,6 @@ export default function QuestionDisplay() {
         }
     };
 
-    const handleNextQuestion = async () => {
-        setLoadingNextQuestion(true);
-        await loadQuestion();
-        setLoadingNextQuestion(false);
-    };
-
-    const handleEndQuiz = async () => {
-        try {
-            await endQuiz(sessionId);
-            navigate(`/quiz/details/${sessionId}`);
-        } catch (err) {
-            console.error('Error ending quiz:', err);
-        }
-    };
 
     // Loading state - pierwsze ładowanie
     if (loading && !question) {
@@ -221,23 +213,17 @@ export default function QuestionDisplay() {
                     </div>
 
                     {/* Difficulty indicator */}
-                    {question.use_adaptive_difficulty && (
+                    {question.use_adaptive_difficulty && question.current_difficulty && (
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600">Poziom trudności:</span>
-                            <div className="flex items-center gap-1">
-                                {[...Array(10)].map((_, i) => (
-                                    <div
-                                        key={i}
-                                        className={`w-3 h-3 rounded-full ${
-                                            i < question.current_difficulty
-                                                ? 'bg-blue-600'
-                                                : 'bg-gray-300'
-                                        }`}
-                                    />
-                                ))}
-                            </div>
-                            <span className="text-sm font-semibold text-blue-600">
-                                {question.current_difficulty.toFixed(1)}/10
+                            <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
+                                question.current_difficulty <= 3 ? 'bg-green-100 text-green-800' :
+                                question.current_difficulty <= 6 ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                            }`}>
+                                {question.current_difficulty <= 3 ? '🟢 Łatwy' :
+                                 question.current_difficulty <= 6 ? '🟡 Średni' :
+                                 '🔴 Trudny'} ({question.current_difficulty.toFixed(1)})
                             </span>
                         </div>
                     )}
@@ -337,22 +323,13 @@ export default function QuestionDisplay() {
                             </div>
                         )}
 
-                        {/* Next question button */}
+                        {/* Auto-loading message */}
                         {!result.quiz_completed ? (
-                            <button
-                                onClick={handleNextQuestion}
-                                disabled={loadingNextQuestion}
-                                className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white py-4 rounded-lg font-bold text-lg hover:from-green-700 hover:to-blue-700 transition disabled:opacity-70"
-                            >
-                                {loadingNextQuestion ? (
-                                    <span className="flex items-center justify-center gap-3">
-                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                        <span>Generuję następne pytanie...</span>
-                                    </span>
-                                ) : (
-                                    'Następne pytanie →'
-                                )}
-                            </button>
+                            <div className="text-center mt-4">
+                                <p className="text-gray-600">
+                                    Ładowanie następnego pytania za chwilę...
+                                </p>
+                            </div>
                         ) : (
                             <div className="space-y-3">
                                 <p className="text-center text-xl font-bold text-gray-800">
@@ -363,31 +340,6 @@ export default function QuestionDisplay() {
                                 </p>
                             </div>
                         )}
-
-                        {/* End quiz button */}
-                        {!result.quiz_completed && (
-                            <button
-                                onClick={handleEndQuiz}
-                                className="w-full mt-3 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400 transition"
-                            >
-                                Zakończ quiz wcześniej
-                            </button>
-                        )}
-                    </div>
-                )}
-
-                {/* Loading next question overlay */}
-                {loadingNextQuestion && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-md">
-                            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-                            <h3 className="text-xl font-bold text-gray-800 mb-2">
-                                🤖 Przygotowuję następne pytanie...
-                            </h3>
-                            <p className="text-gray-600">
-                                ChatGPT generuje pytanie dostosowane do Twojego poziomu
-                            </p>
-                        </div>
                     </div>
                 )}
             </div>

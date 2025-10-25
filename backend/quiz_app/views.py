@@ -118,6 +118,7 @@ def _find_or_create_question(session, question_data):
     """
     Znajduje istniejące podobne pytanie lub tworzy nowe.
     Zapobiega duplikatom w bazie danych.
+    WAŻNE: Sprawdza też czy użytkownik już odpowiadał na to pytanie w tej sesji!
 
     Returns:
         tuple: (Question object, created: bool)
@@ -130,11 +131,23 @@ def _find_or_create_question(session, question_data):
     )
 
     if existing_question:
-        # Użyj istniejącego pytania - NIE TWORZYMY DUPLIKATU!
-        print(f"✅ Używam istniejącego pytania ID={existing_question.id}")
-        return existing_question, False
+        # Sprawdź czy użytkownik JUŻ ODPOWIADAŁ na to pytanie w TEJ SESJI
+        # Jeśli tak, NIE używaj tego pytania ponownie!
+        already_answered = Answer.objects.filter(
+            question=existing_question,
+            user=session.user,
+            question__session=session
+        ).exists()
 
-    # Nie znaleziono - utwórz nowe pytanie
+        if already_answered:
+            print(f"⚠️ Użytkownik już odpowiadał na to pytanie w tej sesji - generuję nowe")
+            # Nie używaj tego pytania, utwórz nowe
+        else:
+            # Użyj istniejącego pytania - użytkownik jeszcze nie odpowiadał
+            print(f"✅ Używam istniejącego pytania ID={existing_question.id}")
+            return existing_question, False
+
+    # Nie znaleziono odpowiedniego - utwórz nowe pytanie
     new_question = Question.objects.create(
         session=session,
         question_text=question_data['question'],
