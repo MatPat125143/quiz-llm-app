@@ -317,6 +317,11 @@ class QuestionAdmin(admin.ModelAdmin):
 
     list_per_page = 25
 
+    # Prefetch answers for better performance
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related('answers')
+
     inlines = [AnswerInline]
 
     fieldsets = (
