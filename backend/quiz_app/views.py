@@ -5,9 +5,11 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.core.cache import cache
-from django.db.models import Q, Count
-from .models import QuizSession, Question, Answer
-from .serializers import QuizSessionSerializer, QuestionSerializer
+from django.core.paginator import Paginator
+from django.db.models import Q, Case, When, Value, IntegerField, FloatField, F, ExpressionWrapper
+from django.db.models.functions import Coalesce
+from .models import QuizSession, Question, QuizSessionQuestion, Answer
+from .serializers import QuizSessionSerializer, AnswerSerializer
 from .permissions import IsQuizOwnerOrAdmin
 from llm_integration.question_generator import QuestionGenerator
 from llm_integration.difficulty_adapter import DifficultyAdapter
@@ -15,82 +17,19 @@ import json
 import random
 import threading
 import time
-from difflib import SequenceMatcher
+import hashlib
 
 # Inicjalizuj generator
 generator = QuestionGenerator()
 difficulty_adapter = DifficultyAdapter()
 
 
-def _get_next_question_cache_key(session_id, difficulty):
-    """Klucz cache dla następnego pytania"""
-    # Zaokrąglij trudność do 1 miejsca po przecinku dla lepszego cache hit rate
-    difficulty_rounded = round(difficulty, 1)
-    return f"next_question_{session_id}_{difficulty_rounded}"
-
-
-def _prefetch_next_question(session_id, topic, difficulty):
-    """
-    Generuj i cache'uj następne pytanie w tle.
-    Działa w osobnym wątku, żeby nie blokować odpowiedzi.
-    """
-    cache_key = _get_next_question_cache_key(session_id, difficulty)
-
-    # Jeśli już jest w cache, nie generuj ponownie
-    if cache.get(cache_key):
-        print(f"✅ Pytanie już w cache (difficulty: {difficulty})")
-        return
-
-    try:
-        print(f"🔄 Rozpoczynam prefetch pytania (session: {session_id}, difficulty: {difficulty})")
-        start_time = time.time()
-
-        # Wygeneruj pytanie
-        question_data = generator.generate_question(topic, difficulty)
-
-        elapsed = time.time() - start_time
-        print(f"✅ Pytanie wygenerowane w {elapsed:.2f}s")
-
-        # Zapisz w cache na 10 minut
-        cache.set(cache_key, question_data, timeout=600)
-        print(f"📦 Pytanie zapisane w cache: {cache_key}")
-
-    except Exception as e:
-        print(f"❌ Error podczas prefetch: {e}")
-
-
-def _prefetch_multiple_difficulties(session_id, topic, current_difficulty):
-    """
-    Prefetch pytań dla różnych poziomów trudności.
-    Zwiększa szansę na cache hit gdy trudność się zmieni.
-    """
-    # Prefetch dla obecnej trudności
-    _prefetch_next_question(session_id, topic, current_difficulty)
-
-    # Prefetch dla trudniejszego poziomu (+1.0)
-    if current_difficulty < 10:
-        _prefetch_next_question(session_id, topic, min(current_difficulty + 1.0, 10.0))
-
-    # Prefetch dla łatwiejszego poziomu (-1.0)
-    if current_difficulty > 1:
-        _prefetch_next_question(session_id, topic, max(current_difficulty - 1.0, 1.0))
-
-
-def _similarity_ratio(text1, text2):
-    """Oblicza podobieństwo między dwoma tekstami (0.0 - 1.0)"""
-    return SequenceMatcher(None, text1.lower(), text2.lower()).ratio()
-
+# ============================================================================
+# POMOCNICZE FUNKCJE DLA GLOBALNYCH PYTAŃ
+# ============================================================================
 
 def _convert_numeric_to_text_difficulty(difficulty_float):
-    """
-    Konwertuje numeryczny poziom trudności na tekstowy.
-
-    Args:
-        difficulty_float: Poziom trudności 1.0-10.0
-
-    Returns:
-        str: 'łatwy', 'średni' lub 'trudny'
-    """
+    """Konwertuje numeryczny poziom trudności na tekstowy"""
     if difficulty_float <= 3.5:
         return 'łatwy'
     elif difficulty_float <= 7.0:
@@ -99,118 +38,274 @@ def _convert_numeric_to_text_difficulty(difficulty_float):
         return 'trudny'
 
 
-def _find_similar_question(question_text, topic, difficulty_text, *, session=None, threshold=0.85):
+def _find_or_create_global_question(topic, question_data, difficulty_text, user=None):
     """
-    Szuka podobnego pytania w bazie danych.
+    Znajdź lub utwórz GLOBALNE pytanie używając hash'a.
 
     Args:
-        question_text: Tekst nowego pytania
         topic: Temat pytania
-        difficulty_text: Poziom trudności ('łatwy', 'średni', 'trudny')
-        session: Opcjonalnie konkretna sesja quizu do przeszukania
-        threshold: Próg podobieństwa (0.85 = 85% podobne)
-
-    Returns:
-        Question object jeśli znaleziono podobne pytanie, inaczej None
-    """
-    # Szukaj pytań z tego samego poziomu trudności
-    similar_questions = Question.objects.filter(
-        difficulty_level=difficulty_text
-    )
-
-    if session is not None:
-        # Ogranicz do bieżącej sesji – zapobiega korzystaniu z pytań innych użytkowników
-        similar_questions = similar_questions.filter(session=session)
-    else:
-        # Zachowaj dotychczasowe zachowanie (fallback) jeśli nie podano sesji
-        similar_questions = similar_questions.filter(session__topic__iexact=topic)
-
-    similar_questions = similar_questions.select_related('session')[:100]
-
-    # Sprawdź podobieństwo tekstu
-    for existing_question in similar_questions:
-        similarity = _similarity_ratio(question_text, existing_question.question_text)
-
-        if similarity >= threshold:
-            print(f"🔄 Znaleziono podobne pytanie (similarity: {similarity:.2f})")
-            print(f"   Nowe: {question_text[:60]}...")
-            print(f"   Istniejące: {existing_question.question_text[:60]}...")
-            return existing_question
-
-    return None
-
-
-def _find_or_create_question(session, question_data, similarity_threshold=0.85):
-    """
-    Znajduje istniejące podobne pytanie lub tworzy nowe.
-    Zapobiega duplikatom w bazie danych.
-    WAŻNE: Sprawdza też czy użytkownik już odpowiadał na to pytanie w tej sesji!
-
-    Args:
-        session: QuizSession object
-        question_data: dict with question data
-        similarity_threshold: float (0.0-1.0) - próg podobieństwa dla deduplication
-                             Wyższy = bardziej restrykcyjny (tylko prawie identyczne pytania)
+        question_data: dict z danymi pytania z LLM
+        difficulty_text: 'łatwy', 'średni', lub 'trudny'
+        user: Użytkownik który tworzy pytanie
 
     Returns:
         tuple: (Question object, created: bool)
     """
-    # Konwertuj numeryczny poziom trudności sesji na tekstowy
+    try:
+        # Oblicz hash contentu
+        content = f"{question_data['question']}{question_data['correct_answer']}{topic}{difficulty_text}"
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
+
+        # Szukaj po hash'u - instant deduplikacja!
+        question, created = Question.objects.get_or_create(
+            content_hash=content_hash,
+            defaults={
+                'topic': topic,
+                'question_text': question_data['question'],
+                'correct_answer': question_data['correct_answer'],
+                'wrong_answer_1': question_data['wrong_answers'][0],
+                'wrong_answer_2': question_data['wrong_answers'][1],
+                'wrong_answer_3': question_data['wrong_answers'][2],
+                'explanation': question_data['explanation'],
+                'difficulty_level': difficulty_text,
+                'created_by': user
+            }
+        )
+
+        if created:
+            print(f"📝 Utworzono nowe globalne pytanie ID={question.id}")
+        else:
+            print(f"✅ Reużywam pytanie ID={question.id} (używane {question.times_used}x)")
+            # Zwiększ licznik użycia
+            question.times_used += 1
+            question.save(update_fields=['times_used'])
+
+        return question, created
+
+    except KeyError as e:
+        print(f"❌ Brak wymaganego klucza w question_data: {e}")
+        raise ValueError(f"Invalid question_data format: missing {e}")
+    except Exception as e:
+        print(f"❌ Error in _find_or_create_global_question: {e}")
+        raise
+
+
+def _add_question_to_session(session, question, order=0):
+    """
+    Dodaje pytanie do sesji quizu, ale zapobiega duplikatom na poziomie treści.
+    """
+
+    # Sprawdź, czy pytanie o identycznej treści już jest w sesji
+    existing_question_ids = QuizSessionQuestion.objects.filter(session=session) \
+        .select_related('question') \
+        .values_list('question__question_text', flat=True)
+
+    if question.question_text in existing_question_ids:
+        print(f"⚠️ Duplikat pytania \"{question.question_text}\" — pomijam dodanie do sesji {session.id}")
+        return None  # lub zwróć False albo jakiś znacznik, że pominięto
+
+    # Jeżeli nie ma duplikatu — dodaj pytanie
+    session_question, created = QuizSessionQuestion.objects.get_or_create(
+        session=session,
+        question=question,
+        defaults={'order': order}
+    )
+
+    if created:
+        print(f"🔗 Dodano pytanie {question.id} do sesji {session.id} (order: {order})")
+    else:
+        print(f"⚠️ Pytanie {question.id} już jest w sesji {session.id}")
+
+    return session_question
+
+
+def _has_user_answered_question(user, question, session=None):
+    """
+    Sprawdza czy użytkownik już odpowiadał na to pytanie.
+
+    Args:
+        user: User object
+        question: Question object
+        session: QuizSession object (opcjonalnie - sprawdzi tylko w tej sesji)
+
+    Returns:
+        bool: True jeśli użytkownik już odpowiadał
+    """
+    filters = {'user': user, 'question': question}
+    if session:
+        filters['session'] = session
+
+    return Answer.objects.filter(**filters).exists()
+
+
+def _session_seen_question_texts(session):
+    """Zwraca zbiór tekstów pytań już dołączonych do sesji (po treści)."""
+    return set(
+        QuizSessionQuestion.objects.filter(session=session)
+        .select_related('question')
+        .values_list('question__question_text', flat=True)
+    )
+
+
+def _generate_unique_question_for_session(session, max_attempts=7):
+    """
+    Generuje/znajduje pytanie, które NIE występuje jeszcze w tej sesji (po question_text).
+    Zwraca (question, generation_status).
+    """
+    seen_texts = _session_seen_question_texts(session)
     difficulty_text = _convert_numeric_to_text_difficulty(session.current_difficulty)
 
-    # Sprawdź czy podobne pytanie już istnieje
-    existing_question = _find_similar_question(
-        question_data['question'],
-        session.topic,
-        difficulty_text,
-        session=session,
-        threshold=similarity_threshold
-    )
+    attempts = 0
+    while attempts < max_attempts:
+        question_data = generator.generate_question(session.topic, session.current_difficulty)
+        question, created = _find_or_create_global_question(
+            session.topic, question_data, difficulty_text, user=session.user
+        )
+        if question.question_text not in seen_texts:
+            order = QuizSessionQuestion.objects.filter(session=session).count()
+            _add_question_to_session(session, question, order=order)
+            return question, ('generated' if created else 'reused')
 
-    if existing_question:
-        # Sprawdź czy użytkownik JUŻ ODPOWIADAŁ na to pytanie w TEJ SESJI
-        # Jeśli tak, NIE używaj tego pytania ponownie!
-        already_answered = Answer.objects.filter(
-            question=existing_question,
-            user=session.user,
-            question__session=session
-        ).exists()
+        attempts += 1
+        print(f"🔁 Duplicate question text detected, regenerating... (attempt {attempts})")
 
-        if already_answered:
-            print(f"⚠️ Użytkownik już odpowiadał na to pytanie w tej sesji - generuję nowe")
-            # Nie używaj tego pytania, utwórz nowe
-        else:
-            # Użyj istniejącego pytania - użytkownik jeszcze nie odpowiadał
-            print(f"✅ Używam istniejącego pytania ID={existing_question.id}")
-            return existing_question, False
+    # Fallback – dobierz istniejące globalne pytanie z tego tematu, którego nie było jeszcze w sesji
+    fallback = Question.objects.filter(topic=session.topic) \
+        .exclude(question_text__in=seen_texts) \
+        .order_by('-times_used').first()
 
-    # Nie znaleziono odpowiedniego - utwórz nowe pytanie
-    new_question = Question.objects.create(
-        session=session,
-        question_text=question_data['question'],
-        correct_answer=question_data['correct_answer'],
-        wrong_answer_1=question_data['wrong_answers'][0],
-        wrong_answer_2=question_data['wrong_answers'][1],
-        wrong_answer_3=question_data['wrong_answers'][2],
-        explanation=question_data['explanation'],
-        difficulty_level=difficulty_text
-    )
-    print(f"📝 Utworzono nowe pytanie ID={new_question.id} (trudność: {difficulty_text})")
-    return new_question, True
+    if fallback:
+        order = QuizSessionQuestion.objects.filter(session=session).count()
+        _add_question_to_session(session, fallback, order=order)
+        return fallback, 'fallback'
 
+    raise ValueError("No unique question available for this session")
+
+
+def _build_question_payload(session, question, generation_status):
+    """Buduje payload odpowiedzi GET /question/ dla danego pytania + sesji."""
+    answers = [
+        question.correct_answer,
+        question.wrong_answer_1,
+        question.wrong_answer_2,
+        question.wrong_answer_3
+    ]
+    random.shuffle(answers)
+
+    question_number = min(session.total_questions + 1, session.questions_count)
+    questions_remaining = max(session.questions_count - session.total_questions, 0)
+
+    return {
+        'question_id': question.id,
+        'question_text': question.question_text,
+        'topic': session.topic,
+        'answers': answers,
+        'option_a': answers[0],
+        'option_b': answers[1],
+        'option_c': answers[2],
+        'option_d': answers[3],
+        'current_difficulty': session.current_difficulty,
+        'question_number': question_number,
+        'questions_count': session.questions_count,
+        'questions_remaining': questions_remaining,
+        'time_per_question': session.time_per_question,
+        'use_adaptive_difficulty': session.use_adaptive_difficulty,
+        'generation_status': generation_status,
+        'difficulty_label': question.difficulty_level,
+        'times_used': question.times_used,
+        'success_rate': question.success_rate,
+    }
+
+
+def _cache_next_question_payload(session, question):
+    """Zapisuje gotowe następne pytanie w cache do szybkiego pobrania."""
+    payload = _build_question_payload(session, question, generation_status='cached')
+    cache.set(f'next_q:{session.id}', payload, timeout=120)  # 2 minuty cache
+
+
+def _prepare_next_question_async(session_id):
+    """
+    W tle: przygotuj i zcache'uj następne pytanie, by kolejny GET był natychmiastowy.
+    Unika duplikatów po TEKŚCIE w obrębie sesji.
+    """
+    try:
+        session = QuizSession.objects.get(id=session_id)
+        if session.is_completed:
+            return
+
+        # Jeśli już czeka w cache – nie rób nic
+        if cache.get(f'next_q:{session.id}'):
+            return
+
+        # Zbierz już „widziane” treści
+        answered_qids = Answer.objects.filter(session=session, user=session.user)\
+            .values_list('question_id', flat=True)
+        seen_texts = set(
+            QuizSessionQuestion.objects.filter(session=session)
+            .select_related('question')
+            .values_list('question__question_text', flat=True)
+        )
+        # do seen_texts dołóż także teksty już odpowiedzianych
+        seen_texts |= set(
+            Answer.objects.filter(session=session, user=session.user)
+            .values_list('question__question_text', flat=True)
+        )
+
+        # FIXED: wybierz z już przypiętych do sesji kolejne nieodpowiedziane + unikalne po TEKŚCIE
+        if not session.use_adaptive_difficulty:
+            qs = QuizSessionQuestion.objects.filter(session=session) \
+                .exclude(question_id__in=answered_qids) \
+                .exclude(question__question_text__in=seen_texts) \
+                .select_related('question').order_by('order')
+
+            session_question = qs.first()
+            if session_question:
+                _cache_next_question_payload(session, session_question.question)
+            return
+
+        # ADAPTIVE: generuj do skutku unikalne pytanie po TEKŚCIE
+        difficulty_text = _convert_numeric_to_text_difficulty(session.current_difficulty)
+        max_attempts, attempts = 7, 0
+        while attempts < max_attempts:
+            qdata = generator.generate_question(session.topic, session.current_difficulty)
+            q, created = _find_or_create_global_question(session.topic, qdata, difficulty_text, user=session.user)
+            if q.question_text not in seen_texts:
+                order = QuizSessionQuestion.objects.filter(session=session).count()
+                _add_question_to_session(session, q, order=order)
+                _cache_next_question_payload(session, q)
+                return
+            attempts += 1
+            print(f"🔁 (pre-gen) duplicate by text, retry {attempts}/{max_attempts}")
+
+        # Fallback – globalne pytanie z tego tematu, którego nie było
+        fallback = Question.objects.filter(topic=session.topic)\
+            .exclude(question_text__in=seen_texts)\
+            .order_by('-times_used').first()
+        if fallback:
+            order = QuizSessionQuestion.objects.filter(session=session).count()
+            _add_question_to_session(session, fallback, order=order)
+            _cache_next_question_payload(session, fallback)
+
+    except Exception as e:
+        print(f"❌ _prepare_next_question_async error: {e}")
+
+# ============================================================================
+# GŁÓWNE ENDPOINTY
+# ============================================================================
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def start_quiz(request):
+    """Rozpocznij nowy quiz - używa GLOBALNYCH pytań"""
     topic = request.data.get('topic')
     difficulty = request.data.get('difficulty', 'medium')
     questions_count = request.data.get('questions_count', 10)
     time_per_question = request.data.get('time_per_question', 30)
     use_adaptive_difficulty = request.data.get('use_adaptive_difficulty', True)
 
-    # Walidacja parametrów
-    questions_count = min(max(int(questions_count), 5), 20)  # 5-20
-    time_per_question = min(max(int(time_per_question), 10), 60)  # 10-60
+    # Walidacja
+    questions_count = min(max(int(questions_count), 5), 20)
+    time_per_question = min(max(int(time_per_question), 10), 60)
 
     difficulty_map = {
         'easy': 2.0,
@@ -234,49 +329,46 @@ def start_quiz(request):
     profile.total_quizzes_played += 1
     profile.save()
 
-    # 🎯 FIXED DIFFICULTY: Wygeneruj WSZYSTKIE pytania na raz (różnorodne!)
+    # 🎯 FIXED DIFFICULTY: Pre-generuj pytania
     if not use_adaptive_difficulty:
-        print(f"📚 Fixed difficulty mode - generating {questions_count} DIVERSE questions")
+        print(f"📚 Fixed difficulty - generating {questions_count} questions")
 
         try:
-            # Wygeneruj WSZYSTKIE pytania jednocześnie z instrukcją o różnorodności
+            # Wygeneruj pytania
             all_questions_data = generator.generate_multiple_questions(
                 topic,
                 initial_difficulty,
                 questions_count
             )
 
-            # Zapisz każde pytanie z WYSOKIM progiem deduplikacji (0.98)
-            # Tylko prawie IDENTYCZNE pytania będą reużywane
-            # "pierwiastek z 49" ≠ "pierwiastek z 25" mimo 96% podobieństwa
+            difficulty_text = _convert_numeric_to_text_difficulty(initial_difficulty)
+
             created_count = 0
             reused_count = 0
-            for question_data in all_questions_data:
-                question, created = _find_or_create_question(
-                    session,
+
+            # Dla każdego pytania: znajdź/utwórz globalne i dodaj do sesji
+            for order, question_data in enumerate(all_questions_data):
+                question, was_created = _find_or_create_global_question(
+                    topic,
                     question_data,
-                    similarity_threshold=0.98  # Bardzo wysoki próg dla fixed mode
+                    difficulty_text,
+                    user=request.user
                 )
-                if created:
+
+                if was_created:
                     created_count += 1
                 else:
                     reused_count += 1
 
-            print(f"✅ Pre-generated {len(all_questions_data)} questions: {created_count} new, {reused_count} reused")
+                # Dodaj pytanie do sesji
+                _add_question_to_session(session, question, order=order)
+
+            print(f"✅ Pre-generated: {created_count} new, {reused_count} reused")
 
         except Exception as e:
             print(f"❌ Error pre-generating questions: {e}")
-            # Fallback - będą generowane na bieżąco
-
-    else:
-        # 🚀 ADAPTIVE DIFFICULTY: PREFETCH pierwszego pytania w tle
-        thread = threading.Thread(
-            target=_prefetch_multiple_difficulties,
-            args=(session.id, topic, initial_difficulty)
-        )
-        thread.daemon = True
-        thread.start()
-        print(f"🔄 Prefetch pierwszego pytania uruchomiony (session: {session.id})")
+            import traceback
+            traceback.print_exc()
 
     return Response({
         'session_id': session.id,
@@ -292,95 +384,117 @@ def start_quiz(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_question(request, session_id):
+    """Pobierz następne pytanie - używa GLOBALNYCH pytań (z unikaniem duplikatów po treści)."""
     session = get_object_or_404(QuizSession, id=session_id, user=request.user)
 
-    # Check if quiz is already completed
     if session.is_completed:
         return Response(
             {'error': 'Quiz already completed'},
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 🎯 FIXED DIFFICULTY: Pobierz z pre-generowanych pytań dla TEJ SESJI
+    # ⚡ 0) Spróbuj zwrócić pytanie z cache (jeśli wcześniej zostało pre-wygenerowane po submit_answer)
+    cached = cache.get(f'next_q:{session.id}')
+    if cached:
+        cache.delete(f'next_q:{session.id}')
+        print("⚡ Served question from cache")
+        return Response(cached)
+
+    # 🎯 FIXED DIFFICULTY: Pobierz z pre-generowanych
     if not session.use_adaptive_difficulty:
-        # WAŻNE: Pobieramy pytania TYLKO z tej sesji (pre-wygenerowane w start_quiz)
-        # oraz te które user jeszcze nie widział
-        answered_question_ids_in_session = Answer.objects.filter(
-            question__session=session,
+        # Pytania które user JUŻ WIDZIAŁ w tej sesji (po ID)
+        answered_question_ids = Answer.objects.filter(
+            session=session,
             user=session.user
         ).values_list('question_id', flat=True)
 
-        # Pobierz pytania TYLKO z tej sesji, w kolejności created_at
-        # To zapewnia że każde pytanie jest unikalne w ramach quizu
-        question = Question.objects.filter(
-            session=session  # TYLKO z tej sesji!
+        # Dodatkowo: unikaj duplikatów po TEKŚCIE (np. inne ID, ta sama treść)
+        answered_texts = Answer.objects.filter(
+            session=session,
+            user=session.user
+        ).values_list('question__question_text', flat=True)
+
+        # Pobierz następne pytanie z sesji (przez QuizSessionQuestion), wykluczając:
+        # - pytania już odpowiedziane (po ID)
+        # - pytania o tej samej treści co już odpowiedziane (po TEKŚCIE)
+        session_question = QuizSessionQuestion.objects.filter(
+            session=session
         ).exclude(
-            id__in=answered_question_ids_in_session
-        ).order_by('created_at').first()  # Deterministyczna kolejność
+            question_id__in=answered_question_ids
+        ).exclude(
+            question__question_text__in=answered_texts
+        ).select_related('question').order_by('order').first()
 
-        if not question:
-            # Brak pytań - prawdopodobnie błąd pre-generowania, wygeneruj fallback
-            print(f"⚠️ No pre-generated questions found - generating fallback")
-            try:
-                question_data = generator.generate_question(
-                    session.topic,
-                    session.current_difficulty
-                )
-                question, created = _find_or_create_question(
-                    session,
-                    question_data,
-                    similarity_threshold=0.98  # Wysoki próg też dla fallback w fixed mode
-                )
-                generation_status = "fallback_generated"
-            except Exception as e:
-                print(f"❌ Błąd podczas generowania fallback: {e}")
-                return Response(
-                    {'error': 'Failed to generate question. Please try again.'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-        else:
-            print(f"📖 Fetched pre-generated question ID={question.id}")
-            generation_status = "pre_generated"
+        if not session_question:
+            return Response(
+                {'error': 'No more questions available'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-    # 🚀 ADAPTIVE DIFFICULTY: SPRÓBUJ POBRAĆ Z CACHE
+        question = session_question.question
+        generation_status = "pre_generated"
+        print(f"📖 Fetched pre-generated question ID={question.id}")
+
+    # 🚀 ADAPTIVE DIFFICULTY: Generuj na bieżąco (z unikaniem duplikatów po TEKŚCIE)
     else:
-        cache_key = _get_next_question_cache_key(session_id, session.current_difficulty)
-        question_data = cache.get(cache_key)
+        try:
+            difficulty_text = _convert_numeric_to_text_difficulty(session.current_difficulty)
 
-        if question_data:
-            # Pytanie gotowe w cache - instant!
-            cache.delete(cache_key)  # Usuń z cache po użyciu
-            print(f"⚡ Pytanie pobrane z cache (instant!) - difficulty: {session.current_difficulty}")
-            generation_status = "cached"
-        else:
-            # Fallback - czekamy na generowanie
-            print(f"⏳ Cache miss - generuję pytanie synchronicznie (difficulty: {session.current_difficulty})")
+            # Unikaj duplikatów po treści: sprawdzaj, czy w sesji już było pytanie o takiej samej treści
+            seen_texts = set(
+                QuizSessionQuestion.objects.filter(session=session)
+                .select_related('question')
+                .values_list('question__question_text', flat=True)
+            )
 
-            try:
-                start_time = time.time()
+            max_attempts = 7
+            attempts = 0
+            question = None
+            created = False
+
+            while attempts < max_attempts:
+                # Generuj nowe pytanie
                 question_data = generator.generate_question(
                     session.topic,
                     session.current_difficulty
                 )
-                elapsed = time.time() - start_time
-                print(f"✅ Pytanie wygenerowane w {elapsed:.2f}s")
-                generation_status = f"generated_in_{elapsed:.1f}s"
 
-            except Exception as e:
-                print(f"❌ Błąd podczas generowania: {e}")
+                # Znajdź lub utwórz GLOBALNE pytanie
+                q, was_created = _find_or_create_global_question(
+                    session.topic,
+                    question_data,
+                    difficulty_text,
+                    user=request.user
+                )
+
+                # Sprawdź unikalność po TEKŚCIE w obrębie sesji
+                if q.question_text not in seen_texts:
+                    # Dodaj do sesji
+                    order = QuizSessionQuestion.objects.filter(session=session).count()
+                    _add_question_to_session(session, q, order=order)
+                    question = q
+                    created = was_created
+                    break
+
+                attempts += 1
+                print(f"🔁 Duplicate by text detected in session, regenerating... (attempt {attempts})")
+
+            if not question:
                 return Response(
-                    {'error': 'Failed to generate question. Please try again.'},
+                    {'error': 'Failed to generate unique question'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-        # Znajdź istniejące podobne pytanie lub utwórz nowe (deduplikacja!)
-        # W adaptive mode używamy niższego progu (0.85 - default)
-        # bo pytania są generowane pojedynczo i częściej chcemy reużywać
-        question, created = _find_or_create_question(session, question_data)
+            generation_status = "generated" if created else "reused"
 
-        if not created:
-            generation_status = "reused_existing"
+        except Exception as e:
+            print(f"❌ Error generating question: {e}")
+            return Response(
+                {'error': 'Failed to generate question'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
+    # Przygotuj odpowiedzi
     answers = [
         question.correct_answer,
         question.wrong_answer_1,
@@ -389,14 +503,7 @@ def get_question(request, session_id):
     ]
     random.shuffle(answers)
 
-    # Map answers to option letters A, B, C, D
-    option_mapping = {}
-    for i, answer in enumerate(answers):
-        option_letter = chr(65 + i)  # A=65, B=66, C=67, D=68
-        option_mapping[option_letter] = answer
-
     question_number = min(session.total_questions + 1, session.questions_count)
-    difficulty_label = question.difficulty_level
     questions_remaining = max(session.questions_count - session.total_questions, 0)
 
     return Response({
@@ -410,35 +517,49 @@ def get_question(request, session_id):
         'option_d': answers[3],
         'current_difficulty': session.current_difficulty,
         'question_number': question_number,
-        'questions_count': session.questions_count,  # Dodano: całkowita liczba pytań w quizie
+        'questions_count': session.questions_count,
         'questions_remaining': questions_remaining,
         'time_per_question': session.time_per_question,
         'use_adaptive_difficulty': session.use_adaptive_difficulty,
-        'generation_status': generation_status,  # Debug info
-        'difficulty_label': difficulty_label
+        'generation_status': generation_status,
+        'difficulty_label': question.difficulty_level,
+        'times_used': question.times_used,  # Dodatkowa info
+        'success_rate': question.success_rate,  # Dodatkowa info
     })
-
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def submit_answer(request):
+    """Zapisz odpowiedź - aktualizuje statystyki GLOBALNEGO pytania"""
     question_id = request.data.get('question_id')
     selected_answer = request.data.get('selected_answer')
     response_time = request.data.get('response_time', 0)
 
     question = get_object_or_404(Question, id=question_id)
-    session = question.session
 
-    if session.user != request.user:
+    # Znajdź sesję tego pytania dla tego użytkownika
+    session_question = QuizSessionQuestion.objects.filter(
+        question=question,
+        session__user=request.user,
+        session__is_completed=False
+    ).select_related('session').first()
+
+    if not session_question:
         return Response(
-            {'error': 'Unauthorized access to this quiz session'},
-            status=status.HTTP_403_FORBIDDEN
+            {'error': 'Question not found in any active session'},
+            status=status.HTTP_404_NOT_FOUND
         )
 
-    # Check if user already answered this question (prevent duplicate submissions)
-    existing_answer = Answer.objects.filter(question=question, user=request.user).first()
+    session = session_question.session
+
+    # Sprawdź czy user już odpowiedział W TEJ SESJI
+    existing_answer = Answer.objects.filter(
+        question=question,
+        user=request.user,
+        session=session
+    ).first()
+
     if existing_answer:
-        # Return the existing answer instead of creating duplicate
         return Response({
             'is_correct': existing_answer.is_correct,
             'correct_answer': question.correct_answer,
@@ -454,15 +575,17 @@ def submit_answer(request):
 
     is_correct = selected_answer == question.correct_answer
 
+    # Utwórz odpowiedź
     answer = Answer.objects.create(
         question=question,
         user=request.user,
+        session=session,
         selected_answer=selected_answer,
         is_correct=is_correct,
         response_time=response_time
     )
 
-    # Increment total_questions AFTER user submits answer
+    # Zaktualizuj statystyki sesji
     session.total_questions += 1
     if session.total_questions > session.questions_count:
         session.total_questions = session.questions_count
@@ -473,19 +596,16 @@ def submit_answer(request):
     else:
         session.current_streak = 0
 
-    # Adaptacyjna zmiana poziomu trudności (jeśli włączona)
+    # Adaptacyjna zmiana trudności
     previous_difficulty = session.current_difficulty
     difficulty_changed = False
+
     if session.use_adaptive_difficulty:
-        # Pobierz ostatnie odpowiedzi dla tej sesji
         recent_answers_objs = Answer.objects.filter(
-            question__session=session
+            session=session
         ).order_by('-answered_at')[:difficulty_adapter.streak_threshold]
 
-        # Przekonwertuj na listę boolean (True = poprawna, False = błędna)
         recent_answers = [ans.is_correct for ans in reversed(list(recent_answers_objs))]
-
-        # Dostosuj poziom trudności
         new_difficulty = difficulty_adapter.adjust_difficulty(
             session.current_difficulty,
             recent_answers
@@ -493,12 +613,16 @@ def submit_answer(request):
 
         if new_difficulty != session.current_difficulty:
             difficulty_changed = True
-            print(f"🎯 Trudność zmieniona: {session.current_difficulty} → {new_difficulty}")
+            print(f"🎯 Difficulty changed: {session.current_difficulty} → {new_difficulty}")
             session.current_difficulty = new_difficulty
 
     session.save()
 
-    # Zaktualizuj statystyki użytkownika
+    # ⭐ ZAKTUALIZUJ STATYSTYKI GLOBALNEGO PYTANIA
+    question.update_stats(is_correct)
+    print(f"📊 Question {question.id} stats: {question.total_answers} answers, {question.success_rate}% success")
+
+    # Zaktualizuj profil użytkownika
     profile = request.user.profile
     profile.total_questions_answered += 1
     if is_correct:
@@ -507,24 +631,18 @@ def submit_answer(request):
         profile.highest_streak = session.current_streak
     profile.save()
 
-    # Check if quiz should be completed
+    # Sprawdź czy quiz zakończony
     quiz_completed = session.total_questions >= session.questions_count
 
-    if quiz_completed and not session.is_completed:
-        session.ended_at = timezone.now()
-        session.is_completed = True
-        session.save()
-        print(f"🏁 Quiz zakończony (session: {session.id})")
-    else:
-        # 🚀 PREFETCH: Generuj następne pytania W TLE
-        # Uruchom w osobnym wątku, żeby nie blokować odpowiedzi
-        thread = threading.Thread(
-            target=_prefetch_multiple_difficulties,
-            args=(session.id, session.topic, session.current_difficulty)
-        )
-        thread.daemon = True
-        thread.start()
-        print(f"🔄 Prefetch następnych pytań uruchomiony (difficulty: {session.current_difficulty})")
+    if not quiz_completed:
+        try:
+            threading.Thread(
+                target=_prepare_next_question_async,
+                args=(session.id,),
+                daemon=True
+            ).start()
+        except Exception as e:
+            print(f"⚠️ Failed to spawn pre-generation thread: {e}")
 
     return Response({
         'is_correct': is_correct,
@@ -539,6 +657,10 @@ def submit_answer(request):
             'total_questions': session.total_questions,
             'correct_answers': session.correct_answers,
             'accuracy': session.accuracy
+        },
+        'question_stats': {  # Dodatkowe info o pytaniu
+            'times_used': question.times_used,
+            'success_rate': question.success_rate
         }
     })
 
@@ -546,191 +668,179 @@ def submit_answer(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def end_quiz(request, session_id):
+    """Zakończ quiz przedwcześnie"""
     session = get_object_or_404(QuizSession, id=session_id, user=request.user)
+
+    if session.is_completed:
+        return Response(
+            {'error': 'Quiz already completed'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     session.ended_at = timezone.now()
     session.is_completed = True
     session.save()
 
     return Response({
-        'message': 'Quiz completed!',
-        'final_stats': {
-            'topic': session.topic,
-            'total_questions': session.total_questions,
-            'correct_answers': session.correct_answers,
-            'accuracy': session.accuracy,
-        }
+        'message': 'Quiz ended successfully',
+        'session_id': session.id,
+        'total_questions': session.total_questions,
+        'correct_answers': session.correct_answers,
+        'accuracy': session.accuracy
     })
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def quiz_history(request):
-    sessions = QuizSession.objects.filter(user=request.user)
+    """
+    Historia quizów użytkownika – zwraca { results, count, next, previous }.
+    Obsługuje: topic, difficulty (easy/medium/hard), is_custom, order_by, page, page_size.
+    """
+    qs = QuizSession.objects.filter(user=request.user, is_completed=True)
 
-    # Filtracja
+    # --- Filtry ---
     topic = request.GET.get('topic')
-    difficulty = request.GET.get('difficulty')
-    is_custom = request.GET.get('is_custom')
+    difficulty = request.GET.get('difficulty')  # 'easy' / 'medium' / 'hard'
+    is_custom = request.GET.get('is_custom')    # 'true' / 'false' / ''
 
     if topic:
-        sessions = sessions.filter(topic__icontains=topic)
-    if difficulty:
-        sessions = sessions.filter(initial_difficulty=difficulty)
-    if is_custom == 'true':
-        sessions = sessions.exclude(
-            questions_count=10,
-            time_per_question=30,
-            use_adaptive_difficulty=True
-        )
-    elif is_custom == 'false':
-        sessions = sessions.filter(
-            questions_count=10,
-            time_per_question=30,
-            use_adaptive_difficulty=True
-        )
+        qs = qs.filter(topic__icontains=topic)
 
-    # Sortowanie
+    if difficulty in ['easy', 'medium', 'hard']:
+        qs = qs.filter(initial_difficulty=difficulty)
+
+    if is_custom in ['true', 'false']:
+        # "custom" wg Twojej definicji w serializerze (niestandardowe ustawienia)
+        # Nie mamy bezpośredniego pola, więc przefiltrujemy w Pythonie:
+        ids = []
+        for s in qs.only('id', 'questions_count', 'time_per_question', 'use_adaptive_difficulty'):
+            custom = (s.questions_count != 10 or s.time_per_question != 30 or not s.use_adaptive_difficulty)
+            if (is_custom == 'true' and custom) or (is_custom == 'false' and not custom):
+                ids.append(s.id)
+        qs = qs.filter(id__in=ids)
+
+    # --- Sortowanie ---
     order_by = request.GET.get('order_by', '-started_at')
-    allowed_sorts = ['started_at', '-started_at', 'topic', '-topic',
-                     'accuracy', '-accuracy', 'total_questions', '-total_questions']
-    if order_by in allowed_sorts:
-        # Dla accuracy potrzebujemy sortować po obliczonym polu
-        if order_by in ['accuracy', '-accuracy']:
-            sessions_list = list(sessions)
-            sessions_list.sort(key=lambda x: x.accuracy, reverse=order_by.startswith('-'))
+    allowed = [
+        'started_at', '-started_at',
+        'accuracy', '-accuracy',
+        'topic', '-topic',
+        'total_questions', '-total_questions'
+    ]
+    if order_by in allowed:
+        qs = qs.order_by(order_by)
 
-            # Paginacja dla posortowanej listy
-            page = int(request.GET.get('page', 1))
-            page_size = int(request.GET.get('page_size', 10))
-            start = (page - 1) * page_size
-            end = start + page_size
+    # --- Paginacja ---
+    try:
+        page = int(request.GET.get('page', 1))
+    except ValueError:
+        page = 1
+    try:
+        page_size = int(request.GET.get('page_size', 10))
+    except ValueError:
+        page_size = 10
 
-            serializer = QuizSessionSerializer(sessions_list[start:end], many=True)
+    paginator = Paginator(qs, page_size)
+    page_obj = paginator.get_page(page)
 
-            return Response({
-                'count': len(sessions_list),
-                'next': page * page_size < len(sessions_list),
-                'previous': page > 1,
-                'results': serializer.data
-            })
-        else:
-            sessions = sessions.order_by(order_by)
+    data = QuizSessionSerializer(page_obj.object_list, many=True).data
 
-    # Paginacja
-    page = int(request.GET.get('page', 1))
-    page_size = int(request.GET.get('page_size', 10))
-
-    total_count = sessions.count()
-    sessions = sessions[(page - 1) * page_size:page * page_size]
-
-    serializer = QuizSessionSerializer(sessions, many=True)
-
+    # Front używa booleans: hasNext/hasPrevious = response.data.next/previous
     return Response({
-        'count': total_count,
-        'next': page * page_size < total_count,
-        'previous': page > 1,
-        'results': serializer.data
+        'results': data,
+        'count': paginator.count,
+        'next': page_obj.has_next(),
+        'previous': page_obj.has_previous(),
     })
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def quiz_details(request, session_id):
+    """Szczegóły zakończonego quizu wraz z pytaniami i odpowiedziami"""
+    print(f"👤 Request from user: {request.user} (id={request.user.id})")
+    print(f"🔍 Looking for session {session_id}...")
+
     session = get_object_or_404(QuizSession, id=session_id, user=request.user)
-    questions = Question.objects.filter(session=session).prefetch_related('answers')
 
-    questions_data = []
-    for q in questions:
-        answer = q.answers.first()
-        if answer:
-            # Create shuffled answers list matching how they were presented
-            answers = [
-                q.correct_answer,
-                q.wrong_answer_1,
-                q.wrong_answer_2,
-                q.wrong_answer_3
-            ]
-            random.shuffle(answers)
+    # Pobierz wszystkie odpowiedzi użytkownika wraz z pytaniami
+    answers = Answer.objects.filter(
+        session=session,
+        user=request.user
+    ).select_related('question').order_by('answered_at')
 
-            # Map to A, B, C, D options
-            option_mapping = {}
-            for i, ans in enumerate(answers):
-                option_letter = chr(65 + i)  # A=65, B=66, C=67, D=68
-                option_mapping[ans] = option_letter
+    print(f"📦 Found {answers.count()} answers for this session")
 
-            questions_data.append({
-                'id': q.id,
-                'question_text': q.question_text,
-                'option_a': answers[0],
-                'option_b': answers[1],
-                'option_c': answers[2],
-                'option_d': answers[3],
-                'selected_answer': option_mapping.get(answer.selected_answer, ''),
-                'correct_answer': option_mapping.get(q.correct_answer, 'A'),
-                'is_correct': answer.is_correct,
-                'explanation': q.explanation,
-                'response_time': answer.response_time,
-                'difficulty': q.difficulty_level
-            })
-
-    # Mapuj initial_difficulty string na wartość numeryczną
-    difficulty_map = {
-        'easy': 2.0,
-        'medium': 5.0,
-        'hard': 8.0
-    }
-    initial_difficulty_value = difficulty_map.get(session.initial_difficulty, 5.0)
-
-    # Sprawdź czy używa custom settings
-    is_custom = (session.questions_count != 10 or
-                 session.time_per_question != 30 or
-                 not session.use_adaptive_difficulty)
+    # Użyj poprawnego serializera
+    answers_data = AnswerSerializer(answers, many=True).data
+    session_data = QuizSessionSerializer(session).data
 
     return Response({
-        'id': session.id,
-        'session_id': session.id,
-        'topic': session.topic,
-        'difficulty': session.initial_difficulty,
-        'initial_difficulty_value': initial_difficulty_value,
-        'current_difficulty': session.current_difficulty,
-        'started_at': session.started_at,
-        'ended_at': session.ended_at,
-        'completed_at': session.ended_at,
-        'total_questions': session.total_questions,
-        'correct_answers': session.correct_answers,
-        'score': session.correct_answers,
-        'accuracy': session.accuracy,
-        'questions_count': session.questions_count,
-        'time_per_question': session.time_per_question,
-        'use_adaptive_difficulty': session.use_adaptive_difficulty,
-        'is_custom': is_custom,
-        'questions': questions_data
+        'session': session_data,
+        'answers': answers_data
     })
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def questions_library(request):
     """
-    API endpoint do przeglądania wszystkich pytań z filtrowaniem i wyszukiwaniem.
-    Używany przez frontend do wyświetlenia biblioteki pytań.
+    Biblioteka wszystkich pytań – proste filtry i paginacja.
+    Filtry: search, topic, difficulty (łatwy/średni/trudny + aliasy),
+            success_min/max, used_min/max, has_explanation.
+    Sort: created_at / -created_at / success_rate / -success_rate.
+    Zwraca: { count, results }, difficulty_level = nazwa (PL).
     """
-    questions = Question.objects.all().select_related('session').prefetch_related('answers')
 
-    # Filtracja po temacie
+    def normalize_diff_token(token: str):
+        t = (token or '').strip().lower()
+        if t in ('łatwy', 'latwy', 'easy'):
+            return 'łatwy'
+        if t in ('średni', 'sredni', 'medium'):
+            return 'średni'
+        if t in ('trudny', 'hard'):
+            return 'trudny'
+        return None
+
+    # ranking do sortowania po nazwie trudności (zostawiamy w razie rozszerzeń)
+    difficulty_rank = Case(
+        When(difficulty_level__iexact='łatwy', then=Value(1)),
+        When(difficulty_level__iexact='latwy', then=Value(1)),
+        When(difficulty_level__iexact='easy',  then=Value(1)),
+        When(difficulty_level__iexact='średni', then=Value(2)),
+        When(difficulty_level__iexact='sredni', then=Value(2)),
+        When(difficulty_level__iexact='medium', then=Value(2)),
+        When(difficulty_level__iexact='trudny', then=Value(3)),
+        When(difficulty_level__iexact='hard',   then=Value(3)),
+        default=Value(2), output_field=IntegerField()
+    )
+
+    # 👇 wyliczana skuteczność: (correct_answers_count / total_answers) * 100
+    safe_total = Case(
+        When(total_answers__gt=0, then=F('total_answers')),
+        default=Value(1),
+        output_field=FloatField()
+    )
+    success_rate_expr = ExpressionWrapper(
+        100.0 * Coalesce(F('correct_answers_count'), Value(0.0)) / safe_total,
+        output_field=FloatField()
+    )
+
+    qs = Question.objects.all().annotate(
+        _difficulty_rank=difficulty_rank,
+        _success_rate=success_rate_expr
+    )
+
+    # --- FILTRY ---
     topic = request.GET.get('topic')
-    if topic:
-        questions = questions.filter(session__topic__icontains=topic)
-
-    # Filtracja po poziomie trudności
-    difficulty = request.GET.get('difficulty')
-    if difficulty and difficulty in ['łatwy', 'średni', 'trudny']:
-        questions = questions.filter(difficulty_level=difficulty)
-
-    # Wyszukiwanie po tekście pytania lub odpowiedziach
     search = request.GET.get('search')
+    diff_param = request.GET.get('difficulty')
+
+    if topic:
+        qs = qs.filter(topic__icontains=topic)
+
     if search:
-        questions = questions.filter(
+        qs = qs.filter(
             Q(question_text__icontains=search) |
             Q(correct_answer__icontains=search) |
             Q(wrong_answer_1__icontains=search) |
@@ -739,37 +849,91 @@ def questions_library(request):
             Q(explanation__icontains=search)
         )
 
-    # Unikalne tematy (dla filtra)
-    if request.GET.get('get_topics') == 'true':
-        topics = Question.objects.values_list('session__topic', flat=True).distinct()
-        return Response({'topics': list(topics)})
+    if diff_param:
+        tokens = [normalize_diff_token(t) for t in diff_param.split(',')]
+        wanted = {t for t in tokens if t}
+        if wanted:
+            qf = Q()
+            if 'łatwy' in wanted:
+                qf |= Q(difficulty_level__iexact='łatwy') | Q(difficulty_level__iexact='latwy') | Q(difficulty_level__iexact='easy')
+            if 'średni' in wanted:
+                qf |= Q(difficulty_level__iexact='średni') | Q(difficulty_level__iexact='sredni') | Q(difficulty_level__iexact='medium')
+            if 'trudny' in wanted:
+                qf |= Q(difficulty_level__iexact='trudny') | Q(difficulty_level__iexact='hard')
+            qs = qs.filter(qf)
 
-    # Sortowanie
+    # success rate 0..100
+    smin = request.GET.get('success_min')
+    smax = request.GET.get('success_max')
+    try:
+        if smin not in (None, ''):
+            qs = qs.filter(_success_rate__gte=float(smin))
+        if smax not in (None, ''):
+            qs = qs.filter(_success_rate__lte=float(smax))
+    except ValueError:
+        pass
+
+    # times_used
+    umin = request.GET.get('used_min')
+    umax = request.GET.get('used_max')
+    try:
+        if umin not in (None, ''):
+            qs = qs.filter(times_used__gte=int(umin))
+        if umax not in (None, ''):
+            qs = qs.filter(times_used__lte=int(umax))
+    except ValueError:
+        pass
+
+    # has_explanation
+    has_expl = (request.GET.get('has_explanation') or '').lower()
+    if has_expl in ('true', 'false'):
+        if has_expl == 'true':
+            qs = qs.filter(~Q(explanation__isnull=True) & ~Q(explanation__exact=''))
+        else:
+            qs = qs.filter(Q(explanation__isnull=True) | Q(explanation__exact=''))
+
+    # --- SORTOWANIE (tylko data i skuteczność, zgodnie z prośbą) ---
     order_by = request.GET.get('order_by', '-created_at')
-    allowed_sorts = ['created_at', '-created_at', 'difficulty_level', '-difficulty_level']
-    if order_by in allowed_sorts:
-        questions = questions.order_by(order_by)
+    mapping = {
+        'created_at': 'created_at',
+        '-created_at': '-created_at',
+        'success_rate': '_success_rate',
+        '-success_rate': '-_success_rate',
+    }
+    qs = qs.order_by(mapping.get(order_by, '-created_at'))
 
-    # Paginacja
-    page = int(request.GET.get('page', 1))
-    page_size = int(request.GET.get('page_size', 20))
+    # --- PAGINACJA ---
+    try:
+        page = int(request.GET.get('page', 1))
+    except ValueError:
+        page = 1
+    try:
+        page_size = int(request.GET.get('page_size', 20))
+    except ValueError:
+        page_size = 20
 
-    total_count = questions.count()
-    questions = questions[(page - 1) * page_size:page * page_size]
+    paginator = Paginator(qs, page_size)
+    page_obj = paginator.get_page(page)
 
-    # Przygotuj dane
-    questions_data = []
-    for q in questions:
-        # Policz statystyki odpowiedzi
-        total_answers = q.answers.count()
-        correct_answers_count = q.answers.filter(is_correct=True).count()
-        wrong_answers_count = total_answers - correct_answers_count
+    # --- helper: ujednolicona nazwa poziomu ---
+    def normalized_name(label):
+        l = (label or '').strip().lower()
+        if l in ('łatwy', 'latwy', 'easy'):
+            return 'łatwy'
+        if l in ('średni', 'sredni', 'medium'):
+            return 'średni'
+        if l in ('trudny', 'hard'):
+            return 'trudny'
+        return label or 'średni'
 
-        questions_data.append({
+    # --- PAYLOAD ---
+    results = []
+    for q in page_obj.object_list:
+        results.append({
             'id': q.id,
             'question_text': q.question_text,
-            'topic': q.session.topic,
-            'difficulty_level': q.difficulty_level,  # Teraz jest tekstem: 'łatwy', 'średni', 'trudny'
+            'topic': q.topic,
+            'difficulty_level': normalized_name(q.difficulty_level),
             'correct_answer': q.correct_answer,
             'wrong_answer_1': q.wrong_answer_1,
             'wrong_answer_2': q.wrong_answer_2,
@@ -777,25 +941,36 @@ def questions_library(request):
             'explanation': q.explanation,
             'created_at': q.created_at,
             'stats': {
-                'total_answers': total_answers,
-                'correct_answers': correct_answers_count,
-                'wrong_answers': wrong_answers_count,
-                'accuracy': round((correct_answers_count / total_answers * 100), 1) if total_answers > 0 else 0
+                'total_answers': q.total_answers,
+                'correct_answers': getattr(q, 'correct_answers_count', None),
+                'wrong_answers': (q.total_answers - getattr(q, 'correct_answers_count', 0))
+                                  if q.total_answers is not None and getattr(q, 'correct_answers_count', None) is not None else None,
+                'accuracy': getattr(q, 'success_rate', None) if getattr(q, 'success_rate', None) is not None else round(getattr(q, '_success_rate', 0.0), 2),
+                'times_used': getattr(q, 'times_used', 0),
             }
         })
 
     return Response({
-        'count': total_count,
-        'next': page * page_size < total_count,
-        'previous': page > 1,
-        'results': questions_data
+        'count': paginator.count,
+        'results': results
     })
+
+# ViewSet dla QuizSession
+class QuizSessionViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet dla sesji quizów - tylko odczyt"""
+    serializer_class = QuizSessionSerializer
+    permission_classes = [IsAuthenticated, IsQuizOwnerOrAdmin]
+
+    def get_queryset(self):
+        return QuizSession.objects.filter(user=self.request.user).order_by('-started_at')
+
 
 @api_view(['GET'])
 def quiz_api_root(request):
     """Bazowy endpoint API quiz"""
     return Response({
-        'message': 'Quiz LLM API',
+        'message': 'Quiz LLM API - GLOBALNE PYTANIA',
+        'version': '2.0',
         'endpoints': {
             'start_quiz': '/api/quiz/start/',
             'get_question': '/api/quiz/question/<session_id>/',
@@ -803,6 +978,24 @@ def quiz_api_root(request):
             'end_quiz': '/api/quiz/end/<session_id>/',
             'quiz_history': '/api/quiz/history/',
             'quiz_details': '/api/quiz/details/<session_id>/',
-            'all_questions': '/api/quiz/questions/',
+            'questions_library': '/api/quiz/questions/',
+        },
+        'features': {
+            'global_questions': True,
+            'deduplication': 'hash-based',
+            'statistics': 'centralized'
         }
     })
+
+
+# ViewSet dla QuizSession
+class QuizSessionViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet dla sesji quizów - tylko odczyt"""
+    serializer_class = QuizSessionSerializer
+    permission_classes = [IsAuthenticated, IsQuizOwnerOrAdmin]
+
+    def get_queryset(self):
+        return QuizSession.objects.filter(user=self.request.user).order_by('-started_at')
+
+
+print("✅ Views.py loaded with GLOBAL QUESTIONS support!")

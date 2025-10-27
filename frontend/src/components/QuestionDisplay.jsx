@@ -72,20 +72,28 @@ export default function QuestionDisplay() {
     };
 
     const handleAutoSubmit = async () => {
-        if (!answered) {
-            await handleSubmit(null); // Auto-submit bez odpowiedzi
+        if (!answered && question && question.question_id) {
+            await handleSubmit(null);
+        } else {
+            console.warn('⚠️ Auto-submit pominięty — brak pytania.');
         }
     };
 
     const handleSubmit = async (answer) => {
+        // 🛡️ zabezpieczenie — brak pytania
+        if (!question || !question.question_id) {
+            console.warn('⚠️ Nie można wysłać odpowiedzi — brak pytania lub ID');
+            return;
+        }
+
         if (answered) return;
 
         const responseTime = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
         const answerToSubmit = answer || selectedAnswer;
 
-        // Jeśli brak odpowiedzi (timeout), wyślij pustą odpowiedź
+        // Jeśli brak odpowiedzi (timeout), wyślij pustą
         if (!answerToSubmit) {
-            console.log('⏰ Timeout - brak odpowiedzi');
+            console.log('⏰ Timeout — brak odpowiedzi, wysyłam pustą.');
         }
 
         try {
@@ -93,14 +101,13 @@ export default function QuestionDisplay() {
 
             const data = await submitAnswer(
                 question.question_id,
-                answerToSubmit || '', // Wyślij pusty string jeśli brak odpowiedzi
+                answerToSubmit || '',
                 responseTime
             );
 
             setResult(data);
 
-            // Nie automatycznie - użytkownik musi kliknąć "Następne pytanie"
-            // Jeśli quiz zakończony, automatycznie przekieruj po 3 sekundach
+            // Jeśli quiz zakończony → przekieruj po chwili
             if (data.quiz_completed) {
                 setTimeout(() => {
                     navigate(`/quiz/details/${sessionId}`);

@@ -1,266 +1,418 @@
-import { useState, useEffect } from 'react';
-import { getQuestionsLibrary } from '../services/api';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getCurrentUser, logout, getQuestionsLibrary } from '../services/api';
+
+const DIFFS = [
+  { value: 'łatwy',  label: '🟢 Łatwy' },
+  { value: 'średni', label: '🟡 Średni' },
+  { value: 'trudny', label: '🔴 Trudny' },
+];
 
 export default function QuestionsLibrary() {
-    const navigate = useNavigate();
-    const [questions, setQuestions] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState({
-        search: '',
-        topic: '',
-        difficulty_min: '',
-        difficulty_max: '',
-        page: 1
-    });
-    const [totalCount, setTotalCount] = useState(0);
-    const [expandedQuestion, setExpandedQuestion] = useState(null);
+  const navigate = useNavigate();
 
-    useEffect(() => {
-        loadQuestions();
-    }, [filters]);
+  // user (header)
+  const [user, setUser] = useState(null);
 
-    const loadQuestions = async () => {
-        try {
-            setLoading(true);
-            const params = {
-                ...filters,
-                page_size: 20
-            };
+  // filtry
+  const [search, setSearch] = useState('');
+  const [topic, setTopic] = useState('');
+  const [difficulty, setDifficulty] = useState([]); // ['łatwy','średni',...]
+  const [orderBy, setOrderBy] = useState('-created_at'); // tylko data i skuteczność (wg prośby)
 
-            // Usuń puste filtry
-            Object.keys(params).forEach(key => {
-                if (params[key] === '') delete params[key];
-            });
+  // dane
+  const [items, setItems] = useState([]);
+  const [count, setCount] = useState(0);
 
-            const data = await getQuestionsLibrary(params);
-            setQuestions(data.results);
-            setTotalCount(data.count);
-        } catch (err) {
-            console.error('Error loading questions:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
+  // paginacja
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
-    const handleFilterChange = (key, value) => {
-        setFilters(prev => ({
-            ...prev,
-            [key]: value,
-            page: 1  // Reset to first page when filtering
-        }));
-    };
+  // stan
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-    const getDifficultyColor = (level) => {
-        if (level <= 3) return 'text-green-600 bg-green-100';
-        if (level <= 6) return 'text-yellow-600 bg-yellow-100';
-        return 'text-red-600 bg-red-100';
-    };
+  useEffect(() => {
+    (async () => {
+      try {
+        const me = await getCurrentUser();
+        setUser(me);
+      } catch (e) {
+        console.error('Error loading user:', e);
+      }
+    })();
+  }, []);
 
-    const getDifficultyLabel = (level) => {
-        if (level <= 3) return 'Łatwy';
-        if (level <= 6) return 'Średni';
-        return 'Trudny';
-    };
+  // Natychmiastowe odświeżanie przy KAŻDEJ zmianie filtra/sortu/strony
+  useEffect(() => {
+    fetchData({ page });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, orderBy, search, topic, difficulty]);
 
-    return (
-        <div className="min-h-screen bg-gray-100 p-6">
-            <div className="max-w-7xl mx-auto">
-                {/* Header */}
-                <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-800">📚 Biblioteka Pytań</h1>
-                            <p className="text-gray-600 mt-2">
-                                Przeglądaj wszystkie pytania quizowe z wyjaśnieniami i statystykami
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => navigate('/dashboard')}
-                            className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition"
-                        >
-                            ← Powrót
-                        </button>
-                    </div>
+  const fetchData = async (extra = {}) => {
+    try {
+      setLoading(true);
+      setError('');
 
-                    {/* Filters */}
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <input
-                            type="text"
-                            placeholder="🔍 Szukaj pytania..."
-                            value={filters.search}
-                            onChange={(e) => handleFilterChange('search', e.target.value)}
-                            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+      const params = {
+        page,
+        page_size: pageSize,
+        order_by: orderBy,
+      };
 
-                        <input
-                            type="text"
-                            placeholder="Temat (np. Matematyka)"
-                            value={filters.topic}
-                            onChange={(e) => handleFilterChange('topic', e.target.value)}
-                            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+      if (search.trim()) params.search = search.trim();
+      if (topic.trim()) params.topic = topic.trim();
+      if (difficulty.length) params.difficulty = difficulty.join(',');
 
-                        <input
-                            type="number"
-                            placeholder="Trudność min (1-10)"
-                            min="1"
-                            max="10"
-                            value={filters.difficulty_min}
-                            onChange={(e) => handleFilterChange('difficulty_min', e.target.value)}
-                            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+      Object.assign(params, extra);
 
-                        <input
-                            type="number"
-                            placeholder="Trudność max (1-10)"
-                            min="1"
-                            max="10"
-                            value={filters.difficulty_max}
-                            onChange={(e) => handleFilterChange('difficulty_max', e.target.value)}
-                            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
+      const data = await getQuestionsLibrary(params);
+      setItems(Array.isArray(data.results) ? data.results : []);
+      setCount(Number(data.count || 0));
+    } catch (e) {
+      console.error('Questions load error:', e);
+      setError('Nie udało się pobrać pytań.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-                    {/* Stats */}
-                    <div className="mt-4 text-gray-600">
-                        Znaleziono: <strong>{totalCount}</strong> pytań
-                    </div>
-                </div>
+  const totalPages = Math.max(1, Math.ceil(count / pageSize));
+  const hasPrev = page > 1;
+  const hasNext = page < totalPages;
 
-                {/* Questions List */}
-                {loading ? (
-                    <div className="bg-white rounded-lg shadow-md p-12 text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                        <p className="mt-4 text-gray-600">Ładowanie pytań...</p>
-                    </div>
-                ) : questions.length === 0 ? (
-                    <div className="bg-white rounded-lg shadow-md p-12 text-center">
-                        <div className="text-6xl mb-4">🔍</div>
-                        <h3 className="text-xl font-semibold text-gray-800 mb-2">
-                            Nie znaleziono pytań
-                        </h3>
-                        <p className="text-gray-600">
-                            Spróbuj zmienić kryteria wyszukiwania
-                        </p>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        {questions.map((question) => (
-                            <div
-                                key={question.id}
-                                className="bg-white rounded-lg shadow-md hover:shadow-lg transition"
-                            >
-                                {/* Question Header */}
-                                <div
-                                    className="p-6 cursor-pointer"
-                                    onClick={() => setExpandedQuestion(
-                                        expandedQuestion === question.id ? null : question.id
-                                    )}
-                                >
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getDifficultyColor(question.difficulty_level)}`}>
-                                                    {getDifficultyLabel(question.difficulty_level)} ({question.difficulty_level})
-                                                </span>
-                                                <span className="text-sm text-gray-500">
-                                                    📚 {question.topic}
-                                                </span>
-                                            </div>
-                                            <h3 className="text-lg font-bold text-gray-800">
-                                                {question.question_text}
-                                            </h3>
-                                        </div>
-
-                                        {/* Stats */}
-                                        <div className="ml-4 text-right">
-                                            {question.stats.total_answers > 0 ? (
-                                                <div className="text-sm">
-                                                    <div className="font-semibold text-gray-700">
-                                                        Odpowiedzi: {question.stats.total_answers}
-                                                    </div>
-                                                    <div className="flex gap-2 mt-1">
-                                                        <span className="text-green-600">
-                                                            ✓ {question.stats.correct_answers}
-                                                        </span>
-                                                        <span className="text-red-600">
-                                                            ✗ {question.stats.wrong_answers}
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-blue-600 font-semibold mt-1">
-                                                        {question.stats.accuracy}% trafności
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="text-sm text-gray-400">
-                                                    Brak odpowiedzi
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Expanded Details */}
-                                {expandedQuestion === question.id && (
-                                    <div className="border-t border-gray-200 p-6 bg-gray-50">
-                                        {/* Answers */}
-                                        <div className="mb-6">
-                                            <h4 className="font-bold text-gray-700 mb-3">Odpowiedzi:</h4>
-                                            <div className="space-y-2">
-                                                {/* Correct Answer */}
-                                                <div className="p-3 bg-green-100 border-2 border-green-500 rounded-lg">
-                                                    <span className="font-bold text-green-700">✓ POPRAWNA:</span>{' '}
-                                                    <span className="text-gray-800">{question.correct_answer}</span>
-                                                </div>
-
-                                                {/* Wrong Answers */}
-                                                {[question.wrong_answer_1, question.wrong_answer_2, question.wrong_answer_3].map((answer, idx) => (
-                                                    <div key={idx} className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                                                        <span className="font-bold text-red-600">✗ Błędna:</span>{' '}
-                                                        <span className="text-gray-700">{answer}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Explanation */}
-                                        <div className="p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded-lg">
-                                            <h4 className="font-bold text-yellow-800 mb-2">💡 Wyjaśnienie:</h4>
-                                            <p className="text-gray-700">{question.explanation}</p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Pagination */}
-                {totalCount > 20 && (
-                    <div className="mt-6 flex justify-center gap-4">
-                        <button
-                            onClick={() => handleFilterChange('page', filters.page - 1)}
-                            disabled={filters.page === 1}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
-                        >
-                            ← Poprzednia
-                        </button>
-
-                        <div className="px-4 py-2 bg-gray-200 rounded-lg">
-                            Strona {filters.page} z {Math.ceil(totalCount / 20)}
-                        </div>
-
-                        <button
-                            onClick={() => handleFilterChange('page', filters.page + 1)}
-                            disabled={filters.page >= Math.ceil(totalCount / 20)}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
-                        >
-                            Następna →
-                        </button>
-                    </div>
-                )}
-            </div>
-        </div>
+  const toggleDiff = (val) => {
+    setPage(1);
+    setDifficulty((prev) =>
+      prev.includes(val) ? prev.filter((d) => d !== val) : [...prev, val]
     );
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setTopic('');
+    setDifficulty([]);
+    setOrderBy('-created_at');
+    setPage(1);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  // pomocnicze – format daty
+  const fmtDate = (iso) => {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('pl-PL', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '—';
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      {/* Header (spójny z historią) */}
+      <header className="bg-white shadow-md">
+        <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-blue-600">📚 Biblioteka Pytań</h1>
+          <div className="flex items-center gap-4">
+            <div
+              className="flex items-center gap-3 cursor-pointer hover:bg-gray-100 p-2 rounded-lg transition"
+              onClick={() => navigate('/profile')}
+            >
+              {user?.profile?.avatar_url ? (
+                <img
+                  src={user.profile.avatar_url}
+                  alt="Avatar"
+                  className="w-10 h-10 rounded-full object-cover border-2 border-blue-500"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center border-2 border-blue-500">
+                  <span className="text-white font-bold text-lg">
+                    {user?.email?.[0]?.toUpperCase() || '?'}
+                  </span>
+                </div>
+              )}
+              <span className="font-semibold text-gray-800">{user?.username}</span>
+            </div>
+
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-semibold"
+            >
+              ← Panel główny
+            </button>
+
+            {user?.profile?.role === 'admin' && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition font-semibold"
+              >
+                👑 Panel admina
+              </button>
+            )}
+
+            <button
+              onClick={handleLogout}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-semibold"
+            >
+              Wyloguj
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Filtry – bez przycisku „Szukaj”, wszystko działa onChange */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Filtry</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Szukaj */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Szukaj w treści / odpowiedziach / wyjaśnieniach
+              </label>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="np. pochodna, trójkąt…"
+                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {/* Temat */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Temat
+              </label>
+              <input
+                type="text"
+                value={topic}
+                onChange={(e) => { setTopic(e.target.value); setPage(1); }}
+                placeholder="np. Matematyka"
+                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {/* Sort – zostawiamy tylko po dacie i skuteczności */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Sortuj według
+              </label>
+              <select
+                value={orderBy}
+                onChange={(e) => { setOrderBy(e.target.value); setPage(1); }}
+                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+              >
+                <option value="-created_at">Najnowsze</option>
+                <option value="created_at">Najstarsze</option>
+                <option value="-success_rate">Skuteczność: ↓</option>
+                <option value="success_rate">Skuteczność: ↑</option>
+              </select>
+            </div>
+
+            {/* Trudności (chipsy) */}
+            <div className="md:col-span-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Poziom trudności
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {DIFFS.map((opt) => {
+                  const active = difficulty.includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => toggleDiff(opt.value)}
+                      className={`px-3 py-1 rounded-full border-2 text-sm font-semibold ${
+                        active
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-gray-100 text-gray-800 border-gray-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="ml-auto px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-semibold"
+                >
+                  🗑️ Wyczyść
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Licznik wyników */}
+        <div className="mb-4 text-gray-600">
+          Znaleziono: <strong>{count}</strong> pytań
+        </div>
+
+        {/* Lista pytań – karta z odpowiedziami i oznaczeniem poprawnej */}
+        <div className="space-y-4">
+          {loading && (
+            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+              Ładowanie…
+            </div>
+          )}
+          {error && !loading && (
+            <div className="bg-white rounded-xl shadow-lg p-12 text-center text-red-600">
+              {error}
+            </div>
+          )}
+          {!loading && !error && items.length === 0 && (
+            <div className="bg-white rounded-xl shadow-lg p-12 text-center text-gray-500">
+              Brak wyników. Zmień filtry.
+            </div>
+          )}
+
+          {!loading && !error && items.map((q) => {
+            const answers = [
+              { key: 'A', text: q.correct_answer, correct: true },
+              { key: 'B', text: q.wrong_answer_1, correct: false },
+              { key: 'C', text: q.wrong_answer_2, correct: false },
+              { key: 'D', text: q.wrong_answer_3, correct: false },
+            ];
+
+            return (
+              <div key={q.id} className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-gray-800 mb-1">
+                      {q.question_text}
+                    </h3>
+
+                    <div className="text-sm text-gray-500 mb-2 flex gap-4 flex-wrap">
+                      <span>
+                        Temat: <span className="font-medium">{q.topic || '—'}</span>
+                      </span>
+                      <span>
+                        Data: <span className="font-medium">{fmtDate(q.created_at)}</span>
+                      </span>
+                    </div>
+
+                    {/* difficulty badge */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                          q.difficulty_level === 'łatwy'
+                            ? 'bg-green-100 text-green-800'
+                            : q.difficulty_level === 'średni'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {q.difficulty_level === 'łatwy' && '🟢 Łatwy'}
+                        {q.difficulty_level === 'średni' && '🟡 Średni'}
+                        {q.difficulty_level === 'trudny' && '🔴 Trudny'}
+                      </span>
+                    </div>
+
+                    {/* Odpowiedzi z zaznaczeniem poprawnej */}
+                    <div className="space-y-2">
+                      {answers.map((a) => (
+                        <div
+                          key={`${q.id}-${a.key}`}
+                          className={`p-3 rounded border ${
+                            a.correct
+                              ? 'bg-green-50 border-green-400'
+                              : 'bg-gray-50 border-gray-300'
+                          }`}
+                        >
+                          <span className="font-bold mr-2">{a.key}.</span>
+                          <span>{a.text}</span>
+                          {a.correct && (
+                            <span className="ml-3 px-2 py-0.5 rounded text-xs bg-green-600 text-white">
+                              ✅ Poprawna
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Wyjaśnienie */}
+                    {q.explanation && (
+                      <div className="mt-3 bg-blue-50 border-l-4 border-blue-500 p-3 rounded">
+                        <p className="text-sm text-blue-900">
+                          <span className="font-semibold">💡 Wyjaśnienie:</span> {q.explanation}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Statystyki */}
+                  <div className="text-right ml-4 text-sm text-gray-600 min-w-[180px]">
+                    {'stats' in q && q.stats ? (
+                      <>
+                        {'accuracy' in q.stats && (
+                          <div className="mb-1">
+                            Skuteczność: <b>{q.stats.accuracy ?? 0}%</b>
+                          </div>
+                        )}
+                        {'total_answers' in q.stats && (
+                          <div className="mb-1">
+                            Odpowiedzi: <b>{q.stats.total_answers ?? 0}</b>
+                          </div>
+                        )}
+                        {'correct_answers' in q.stats && (
+                          <div className="mb-1">
+                            Poprawne: <b>{q.stats.correct_answers ?? 0}</b>
+                          </div>
+                        )}
+                        {'wrong_answers' in q.stats && (
+                          <div>
+                            Błędne: <b>{q.stats.wrong_answers ?? 0}</b>
+                          </div>
+                        )}
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Pagniacja */}
+        {count > pageSize && (
+          <div className="mt-6 flex justify-center items-center gap-4">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={!hasPrev || loading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ← Poprzednia
+            </button>
+
+            <span className="text-gray-700 font-semibold">
+              Strona {page} z {totalPages}
+            </span>
+
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={!hasNext || loading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Następna →
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

@@ -154,7 +154,7 @@ class QuizSessionAdmin(admin.ModelAdmin):
             return obj.topic[:30] + '...'
         return obj.topic
     topic_display.short_description = 'Topic'
-    topic_display.admin_order_field = 'topic'
+    topic_display.admin_order_field = 'session__topic'
 
     def difficulty_badge(self, obj):
         """Display difficulty as colored badge"""
@@ -417,16 +417,21 @@ class QuestionAdmin(admin.ModelAdmin):
     explanation_display.short_description = 'Explanation'
 
     def topic_display(self, obj):
-        """Display session topic with link"""
-        topic = obj.session.topic
-        return format_html(
-            '<a href="/admin/quiz_app/quizsession/{}/change/" title="{}">{}</a>',
-            obj.session.id,
-            topic,
-            topic[:30] + '...' if len(topic) > 30 else topic
-        )
+        """Display session topic with link, fallback to question.topic"""
+        if obj.session:
+            topic = obj.session.topic
+            return format_html(
+                '<a href="/admin/quiz_app/quizsession/{}/change/" title="{}">{}</a>',
+                obj.session.id,
+                topic,
+                topic[:30] + '...' if len(topic) > 30 else topic
+            )
+        else:
+            topic = obj.topic or "Brak"
+            return topic[:30] + '...' if len(topic) > 30 else topic
+
     topic_display.short_description = 'Topic'
-    topic_display.admin_order_field = 'session__topic'
+    topic_display.admin_order_field = 'topic'
 
     def difficulty_display(self, obj):
         """Display difficulty with color"""

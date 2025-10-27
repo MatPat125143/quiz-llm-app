@@ -19,6 +19,7 @@ export default function QuizDetails() {
                 getQuizDetails(sessionId),
                 getCurrentUser()
             ]);
+            console.log('🎯 quizData', quizData);
             setQuiz(quizData);
             setUser(userData);
         } catch (err) {
@@ -41,7 +42,7 @@ export default function QuizDetails() {
         );
     }
 
-    if (!quiz) {
+    if (!quiz || !quiz.session) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-100">
                 <div className="text-center">
@@ -58,14 +59,15 @@ export default function QuizDetails() {
         );
     }
 
+    const session = quiz.session;
+    const endedAt = new Date(session.ended_at || session.completed_at);
+
     return (
         <div className="min-h-screen bg-gray-100">
-            {/* Header */}
             <header className="bg-white shadow-md">
                 <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
                     <h1 className="text-3xl font-bold text-blue-600">📋 Szczegóły Quizu</h1>
                     <div className="flex items-center gap-4">
-                        {/* Avatar i nazwa użytkownika */}
                         <div
                             className="flex items-center gap-3 cursor-pointer hover:bg-gray-100 p-2 rounded-lg transition"
                             onClick={() => navigate('/profile')}
@@ -86,7 +88,6 @@ export default function QuizDetails() {
                             <span className="font-semibold text-gray-800">{user?.username}</span>
                         </div>
 
-                        {/* Dashboard button */}
                         <button
                             onClick={() => navigate('/dashboard')}
                             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-semibold"
@@ -94,7 +95,6 @@ export default function QuizDetails() {
                             ← Panel główny
                         </button>
 
-                        {/* Admin button */}
                         {user?.profile?.role === 'admin' && (
                             <button
                                 onClick={() => navigate('/admin')}
@@ -104,7 +104,6 @@ export default function QuizDetails() {
                             </button>
                         )}
 
-                        {/* Logout button */}
                         <button
                             onClick={handleLogout}
                             className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-semibold"
@@ -116,127 +115,135 @@ export default function QuizDetails() {
             </header>
 
             <div className="max-w-4xl mx-auto px-4 py-8">
-                {/* Quiz Info Card */}
+                {/* Karta z informacjami */}
                 <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <h1 className="text-3xl font-bold text-gray-800">{quiz.topic}</h1>
+                            <h1 className="text-3xl font-bold text-gray-800">{session.topic}</h1>
                             <p className="text-gray-600 mt-2">
-                                {new Date(quiz.ended_at || quiz.completed_at).toLocaleDateString('pl-PL', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                })}
+                                {isNaN(endedAt.getTime())
+                                    ? 'Brak daty zakończenia'
+                                    : endedAt.toLocaleDateString('pl-PL', {
+                                          year: 'numeric',
+                                          month: 'long',
+                                          day: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                      })}
                             </p>
                         </div>
                         <div className="text-right">
                             <p className="text-4xl font-bold text-blue-600">
-                                {quiz.correct_answers}/{quiz.total_questions}
+                                {session.correct_answers}/{session.total_questions}
                             </p>
-                            <p className="text-gray-600">{quiz.accuracy}% dokładności</p>
+                            <p className="text-gray-600">{session.accuracy}% dokładności</p>
                         </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
                         <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                            quiz.difficulty === 'easy'
+                            session.difficulty === 'easy'
                                 ? 'bg-green-100 text-green-800'
-                                : quiz.difficulty === 'medium'
+                                : session.difficulty === 'medium'
                                 ? 'bg-yellow-100 text-yellow-800'
                                 : 'bg-red-100 text-red-800'
                         }`}>
-                            {quiz.difficulty === 'easy' && '🟢 Łatwy'}
-                            {quiz.difficulty === 'medium' && '🟡 Średni'}
-                            {quiz.difficulty === 'hard' && '🔴 Trudny'}
+                            {session.difficulty === 'easy' && '🟢 Łatwy'}
+                            {session.difficulty === 'medium' && '🟡 Średni'}
+                            {session.difficulty === 'hard' && '🔴 Trudny'}
                         </span>
-                        {quiz.is_custom && (
+                        {session.is_custom && (
                             <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
                                 ⚙️ Custom
                             </span>
                         )}
-                        {quiz.use_adaptive_difficulty && (
+                        {session.use_adaptive_difficulty && (
                             <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
-                                📊 Początkowy: {quiz.initial_difficulty_value?.toFixed(1) || 'N/A'} → Końcowy: {quiz.current_difficulty?.toFixed(1) || 'N/A'}
+                                📊 Początkowy: {session.initial_difficulty_value?.toFixed(1) || 'N/A'} → Końcowy: {session.current_difficulty?.toFixed(1) || 'N/A'}
                             </span>
                         )}
                     </div>
                 </div>
 
-                {/* Questions */}
-                {quiz.questions && quiz.questions.map((question, index) => (
-                    <div key={question.id} className="bg-white rounded-xl shadow-lg p-6 mb-4">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-gray-800">
-                                Pytanie {index + 1} z {quiz.total_questions}
-                            </h3>
-                            {question.is_correct ? (
-                                <span className="px-4 py-2 bg-green-100 text-green-800 rounded-lg font-bold">
-                                    ✅ Poprawnie
-                                </span>
-                            ) : (
-                                <span className="px-4 py-2 bg-red-100 text-red-800 rounded-lg font-bold">
-                                    ❌ Niepoprawnie
-                                </span>
-                            )}
-                        </div>
+                {/* Lista pytań */}
+                {quiz.answers.map((question, index) => {
+                    const answerOptions = [
+                        { key: 'A', text: question.correct_answer },
+                        { key: 'B', text: question.wrong_answer_1 },
+                        { key: 'C', text: question.wrong_answer_2 },
+                        { key: 'D', text: question.wrong_answer_3 }
+                    ];
 
-                        <p className="text-lg text-gray-800 mb-4 font-semibold">{question.question_text}</p>
+                    return (
+                        <div key={`question-${index}`} className="bg-white rounded-xl shadow-lg p-6 mb-4">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-bold text-gray-800">
+                                    Pytanie {index + 1} z {session.total_questions}
+                                </h3>
+                                {question.is_correct ? (
+                                    <span className="px-4 py-2 bg-green-100 text-green-800 rounded-lg font-bold">
+                                        ✅ Poprawnie
+                                    </span>
+                                ) : (
+                                    <span className="px-4 py-2 bg-red-100 text-red-800 rounded-lg font-bold">
+                                        ❌ Niepoprawnie
+                                    </span>
+                                )}
+                            </div>
 
-                        <div className="space-y-3 mb-4">
-                            {['A', 'B', 'C', 'D'].map((option) => {
-                                const optionText = question[`option_${option.toLowerCase()}`];
-                                const isCorrect = question.correct_answer === option;
-                                const isSelected = question.selected_answer === option;
-                                const wasWrong = isSelected && !isCorrect;
+                            <p className="text-lg text-gray-800 mb-4 font-semibold">{question.question_text}</p>
 
-                                return (
-                                    <div
-                                        key={`${question.id}-${option}`}
-                                        className={`p-4 rounded-lg border-2 transition ${
-                                            isCorrect
-                                                ? 'bg-green-100 border-green-500'
-                                                : wasWrong
-                                                ? 'bg-red-100 border-red-500'
-                                                : 'bg-gray-50 border-gray-300'
-                                        }`}
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <span className="font-bold text-lg">{option}.</span>
-                                            <span className="flex-1">{optionText}</span>
-                                            <div className="flex flex-col gap-1 items-end">
-                                                {isCorrect && (
-                                                    <span className="px-2 py-1 bg-green-600 text-white rounded text-sm font-semibold whitespace-nowrap">
-                                                        ✅ Poprawna odpowiedź
-                                                    </span>
-                                                )}
-                                                {isSelected && !isCorrect && (
-                                                    <span className="px-2 py-1 bg-red-600 text-white rounded text-sm font-semibold whitespace-nowrap">
-                                                        ❌ Twoja odpowiedź
-                                                    </span>
-                                                )}
-                                                {isSelected && isCorrect && (
-                                                    <span className="px-2 py-1 bg-green-600 text-white rounded text-sm font-semibold whitespace-nowrap">
-                                                        ✅ Twoja odpowiedź
-                                                    </span>
-                                                )}
+                            <div className="space-y-3 mb-4">
+                                {answerOptions.map(({ key, text }) => {
+                                    const isCorrect = question.correct_answer === text;
+                                    const isSelected = question.selected_answer === text;
+                                    const wasWrong = isSelected && !isCorrect;
+
+                                    return (
+                                        <div
+                                            key={`${question.question_text}-${key}`}
+                                            className={`p-4 rounded-lg border-2 transition ${
+                                                isCorrect
+                                                    ? 'bg-green-100 border-green-500'
+                                                    : wasWrong
+                                                    ? 'bg-red-100 border-red-500'
+                                                    : 'bg-gray-50 border-gray-300'
+                                            }`}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <span className="font-bold text-lg">{key}.</span>
+                                                <span className="flex-1">{text}</span>
+                                                <div className="flex flex-col gap-1 items-end">
+                                                    {isCorrect && (
+                                                        <span className="px-2 py-1 bg-green-600 text-white rounded text-sm font-semibold whitespace-nowrap">
+                                                            ✅ Poprawna odpowiedź
+                                                        </span>
+                                                    )}
+                                                    {isSelected && !isCorrect && (
+                                                        <span className="px-2 py-1 bg-red-600 text-white rounded text-sm font-semibold whitespace-nowrap">
+                                                            ❌ Twoja odpowiedź
+                                                        </span>
+                                                    )}
+                                                    {isSelected && isCorrect && (
+                                                        <span className="px-2 py-1 bg-green-600 text-white rounded text-sm font-semibold whitespace-nowrap">
+                                                            ✅ Twoja odpowiedź
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                    );
+                                })}
+                            </div>
 
-                        {/* Explanation */}
-                        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                            <p className="font-semibold text-blue-800 mb-1">💡 Wyjaśnienie:</p>
-                            <p className="text-gray-800">{question.explanation}</p>
+                            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                                <p className="font-semibold text-blue-800 mb-1">💡 Wyjaśnienie:</p>
+                                <p className="text-gray-800">{question.explanation}</p>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
 
-                {/* Buttons */}
                 <div className="flex gap-4">
                     <button
                         onClick={() => navigate('/dashboard')}
