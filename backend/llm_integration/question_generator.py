@@ -23,7 +23,7 @@ class QuestionGenerator:
         try:
             from openai import OpenAI
             self.client = OpenAI(api_key=self.api_key)
-            print("✅ OpenAI client initialized successfully with gpt-3.5-turbo")
+            print("✅ OpenAI client initialized successfully")
         except ImportError:
             print("⚠️  openai package not installed - using fallback questions")
         except Exception as e:

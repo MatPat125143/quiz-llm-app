@@ -150,6 +150,7 @@ class Answer(models.Model):
     is_correct = models.BooleanField()
     response_time = models.FloatField()
     answered_at = models.DateTimeField(auto_now_add=True)
+    difficulty_at_answer = models.FloatField(default=5.0)
 
     class Meta:
         ordering = ['-answered_at']

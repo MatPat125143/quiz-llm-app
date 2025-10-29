@@ -1,427 +1,228 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-    getCurrentUser,
-    updateProfile,
-    changePassword,
-    uploadAvatar,
-    deleteAvatar,
-    logout
-} from '../services/api';
+import { getCurrentUser, updateProfile, changePassword, uploadAvatar, logout } from '../services/api';
+import Layout from './Layout';
 
 export default function UserProfile() {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('profile');
-    const [message, setMessage] = useState({ type: '', text: '' });
-    const navigate = useNavigate();
-    const fileInputRef = useRef(null);
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
-    // Profile form
-    const [profileData, setProfileData] = useState({
-        email: '',
-        username: ''
-    });
+  const [profileData, setProfileData] = useState({
+    username: '',
+    email: '',
+  });
 
-    // Password form
-    const [passwordData, setPasswordData] = useState({
-        oldPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-    });
+  const [passwordData, setPasswordData] = useState({
+    old_password: '',
+    new_password: '',
+    confirm_password: '',
+  });
 
-    useEffect(() => {
-        loadUser();
-    }, []);
+  useEffect(() => {
+    loadUser();
+  }, []);
 
-    const loadUser = async () => {
-        try {
-            const data = await getCurrentUser();
-            setUser(data);
-            setProfileData({
-                email: data.email,
-                username: data.username
-            });
-        } catch (err) {
-            console.error('Error loading user:', err);
-            setMessage({ type: 'error', text: 'Nie udało się załadować danych użytkownika' });
-        } finally {
-            setLoading(false);
-        }
-    };
+  const loadUser = async () => {
+    try {
+      const me = await getCurrentUser();
+      setUser(me);
+      setProfileData({
+        username: me.username,
+        email: me.email,
+      });
+    } catch (err) {
+      console.error('Error loading user:', err);
+    }
+  };
 
-    const handleProfileUpdate = async (e) => {
-        e.preventDefault();
-        setMessage({ type: '', text: '' });
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setSuccessMsg('');
+    setErrorMsg('');
 
-        try {
-            const response = await updateProfile(profileData);
-            setUser(response.user);
-            setMessage({ type: 'success', text: 'Profil zaktualizowany pomyślnie!' });
-        } catch (err) {
-            console.error('Update error:', err);
-            setMessage({
-                type: 'error',
-                text: err.response?.data?.email?.[0] || err.response?.data?.username?.[0] || 'Nie udało się zaktualizować profilu'
-            });
-        }
-    };
+    try {
+      await updateProfile(profileData);
+      setSuccessMsg('✅ Profil został zaktualizowany pomyślnie!');
+    } catch (err) {
+      console.error('Profile update failed:', err);
+      setErrorMsg('❌ Nie udało się zaktualizować profilu.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handlePasswordChange = async (e) => {
-        e.preventDefault();
-        setMessage({ type: '', text: '' });
-
-        if (passwordData.newPassword !== passwordData.confirmPassword) {
-            setMessage({ type: 'error', text: 'Hasła nie są identyczne' });
-            return;
-        }
-
-        if (passwordData.newPassword.length < 8) {
-            setMessage({ type: 'error', text: 'Hasło musi mieć minimum 8 znaków' });
-            return;
-        }
-
-        try {
-            await changePassword(passwordData.oldPassword, passwordData.newPassword);
-            setMessage({ type: 'success', text: 'Hasło zmienione pomyślnie!' });
-            setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
-        } catch (err) {
-            console.error('Password change error:', err);
-            setMessage({
-                type: 'error',
-                text: err.response?.data?.old_password?.[0] || 'Nie udało się zmienić hasła'
-            });
-        }
-    };
-
-    const handleAvatarUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        // Validate file
-        if (!file.type.startsWith('image/')) {
-            setMessage({ type: 'error', text: 'Proszę wybrać plik obrazu' });
-            return;
-        }
-
-        if (file.size > 5 * 1024 * 1024) {
-            setMessage({ type: 'error', text: 'Obraz musi być mniejszy niż 5MB' });
-            return;
-        }
-
-        try {
-            await uploadAvatar(file);
-            await loadUser();
-            setMessage({ type: 'success', text: 'Avatar przesłany pomyślnie!' });
-        } catch (err) {
-            console.error('Avatar upload error:', err);
-            setMessage({ type: 'error', text: 'Nie udało się przesłać avatara' });
-        }
-    };
-
-    const handleAvatarDelete = async () => {
-        if (!confirm('Czy na pewno chcesz usunąć swój avatar?')) return;
-
-        try {
-            await deleteAvatar();
-            await loadUser();
-            setMessage({ type: 'success', text: 'Avatar usunięty pomyślnie!' });
-        } catch (err) {
-            console.error('Avatar delete error:', err);
-            setMessage({ type: 'error', text: 'Nie udało się usunąć avatara' });
-        }
-    };
-
-    const handleLogout = () => {
-        logout();
-        navigate('/login');
-    };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-100">
-                <div className="text-2xl font-semibold text-gray-600">Ładowanie...</div>
-            </div>
-        );
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    if (passwordData.new_password !== passwordData.confirm_password) {
+      setErrorMsg('❌ Hasła nie są identyczne!');
+      return;
     }
 
+    setLoading(true);
+    setSuccessMsg('');
+    setErrorMsg('');
+
+    try {
+      await changePassword(passwordData);
+      setSuccessMsg('🔒 Hasło zostało zmienione pomyślnie!');
+      setPasswordData({ old_password: '', new_password: '', confirm_password: '' });
+    } catch (err) {
+      console.error('Password change failed:', err);
+      setErrorMsg('❌ Nie udało się zmienić hasła.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+const handleAvatarUpload = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  setPreview(URL.createObjectURL(file));
+
+  try {
+    await uploadAvatar(file); // ✅ przekazujemy sam plik, nie formData
+    setSuccessMsg('🖼️ Avatar został zaktualizowany!');
+    await loadUser(); // ✅ odśwież dane użytkownika
+  } catch (err) {
+    console.error('Avatar upload failed:', err);
+    setErrorMsg('❌ Nie udało się przesłać avatara.');
+  }
+};
+
+  if (!user) {
     return (
-        <div className="min-h-screen bg-gray-100">
-            {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
-                    <h1 className="text-3xl font-bold text-blue-600">👤 Profil użytkownika</h1>
-                    <div className="flex items-center gap-4">
-                        {/* Avatar i nazwa użytkownika */}
-                        <div className="flex items-center gap-3">
-                            {user?.profile?.avatar_url ? (
-                                <img
-                                    src={user.profile.avatar_url}
-                                    alt="Avatar"
-                                    className="w-10 h-10 rounded-full object-cover border-2 border-blue-500"
-                                />
-                            ) : (
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center border-2 border-blue-500">
-                                    <span className="text-white font-bold text-lg">
-                                        {user?.email?.[0]?.toUpperCase() || '?'}
-                                    </span>
-                                </div>
-                            )}
-                            <span className="font-semibold text-gray-800">{user?.username}</span>
-                        </div>
-
-                        {/* Dashboard button */}
-                        <button
-                            onClick={() => navigate('/dashboard')}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-semibold"
-                        >
-                            ← Panel główny
-                        </button>
-
-                        {/* Admin button */}
-                        {user?.profile?.role === 'admin' && (
-                            <button
-                                onClick={() => navigate('/admin')}
-                                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition font-semibold"
-                            >
-                                👑 Panel admina
-                            </button>
-                        )}
-
-                        {/* Logout button */}
-                        <button
-                            onClick={handleLogout}
-                            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-semibold"
-                        >
-                            Wyloguj
-                        </button>
-                    </div>
-                </div>
-            </header>
-
-            <div className="max-w-7xl mx-auto px-4 py-8">
-                {/* Message */}
-                {message.text && (
-                    <div className={`mb-6 px-4 py-3 rounded-lg ${
-                        message.type === 'success' 
-                            ? 'bg-green-100 border border-green-400 text-green-700'
-                            : 'bg-red-100 border border-red-400 text-red-700'
-                    }`}>
-                        {message.text}
-                    </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Sidebar */}
-                    <div className="md:col-span-1">
-                        <div className="bg-white rounded-xl shadow-lg p-6">
-                            {/* Avatar */}
-                            <div className="text-center mb-6">
-                                <div className="relative inline-block">
-                                    {user?.profile?.avatar_url ? (
-                                        <img
-                                            src={user.profile.avatar_url}
-                                            alt="Avatar"
-                                            className="w-32 h-32 rounded-full object-cover border-4 border-blue-500"
-                                        />
-                                    ) : (
-                                        <div className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center border-4 border-blue-500">
-                                            <span className="text-5xl text-white font-bold">
-                                                {user?.email?.[0]?.toUpperCase() || '?'}
-                                            </span>
-                                        </div>
-                                    )}
-                                    <button
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 transition"
-                                        title="Zmień avatar"
-                                    >
-                                        📷
-                                    </button>
-                                    <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={handleAvatarUpload}
-                                        className="hidden"
-                                    />
-                                </div>
-                                {user?.profile?.avatar_url && (
-                                    <button
-                                        onClick={handleAvatarDelete}
-                                        className="mt-2 text-sm text-red-600 hover:text-red-700"
-                                    >
-                                        Usuń avatar
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* User Info */}
-                            <div className="text-center mb-6">
-                                <h2 className="text-2xl font-bold text-gray-800">{user?.username}</h2>
-                                <p className="text-gray-600">{user?.email}</p>
-                                {user?.profile?.role === 'admin' && (
-                                    <span className="inline-block mt-2 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
-                                        👑 ADMIN
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Stats */}
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600">Rozegrane quizy</span>
-                                    <span className="font-bold text-blue-600">{user?.profile?.total_quizzes_played || 0}</span>
-                                </div>
-                                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600">Odpowiedzi</span>
-                                    <span className="font-bold text-green-600">{user?.profile?.total_questions_answered || 0}</span>
-                                </div>
-                                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600">Dokładność</span>
-                                    <span className="font-bold text-purple-600">{user?.profile?.accuracy || 0}%</span>
-                                </div>
-                                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600">Najwyższa passa</span>
-                                    <span className="font-bold text-orange-600">{user?.profile?.highest_streak || 0} 🔥</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Main Content */}
-                    <div className="md:col-span-2">
-                        {/* Tabs */}
-                        <div className="bg-white rounded-xl shadow-lg p-6">
-                            <div className="flex border-b mb-6">
-                                <button
-                                    onClick={() => setActiveTab('profile')}
-                                    className={`px-6 py-3 font-semibold transition ${
-                                        activeTab === 'profile'
-                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                            : 'text-gray-600 hover:text-blue-600'
-                                    }`}
-                                >
-                                    📝 Edytuj profil
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('password')}
-                                    className={`px-6 py-3 font-semibold transition ${
-                                        activeTab === 'password'
-                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                            : 'text-gray-600 hover:text-blue-600'
-                                    }`}
-                                >
-                                    🔒 Zmień hasło
-                                </button>
-                            </div>
-
-                            {/* Profile Tab */}
-                            {activeTab === 'profile' && (
-                                <form onSubmit={handleProfileUpdate}>
-                                    <div className="mb-6">
-                                        <label className="block text-gray-700 font-semibold mb-2">
-                                            Adres email
-                                        </label>
-                                        <input
-                                            type="email"
-                                            value={profileData.email}
-                                            onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-                                            required
-                                        />
-                                    </div>
-
-                                    <div className="mb-6">
-                                        <label className="block text-gray-700 font-semibold mb-2">
-                                            Nazwa użytkownika
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={profileData.username}
-                                            onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
-                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-                                            required
-                                        />
-                                    </div>
-
-                                    <button
-                                        type="submit"
-                                        className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold text-lg"
-                                    >
-                                        Zapisz zmiany
-                                    </button>
-                                </form>
-                            )}
-
-                            {/* Password Tab */}
-                            {activeTab === 'password' && (
-                                <form onSubmit={handlePasswordChange}>
-                                    <div className="mb-4">
-                                        <label className="block text-gray-700 font-semibold mb-2">
-                                            Obecne hasło
-                                        </label>
-                                        <input
-                                            type="password"
-                                            value={passwordData.oldPassword}
-                                            onChange={(e) => setPasswordData({ ...passwordData, oldPassword: e.target.value })}
-                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-                                            required
-                                        />
-                                    </div>
-
-                                    {/* FORGOT PASSWORD LINK */}
-                                    <div className="mb-6 text-right">
-                                        <button
-                                            type="button"
-                                            onClick={() => navigate('/forgot-password')}
-                                            className="text-blue-600 hover:text-blue-700 text-sm font-semibold"
-                                        >
-                                            Zapomniałeś obecnego hasła?
-                                        </button>
-                                    </div>
-
-                                    <div className="mb-6">
-                                        <label className="block text-gray-700 font-semibold mb-2">
-                                            Nowe hasło
-                                        </label>
-                                        <input
-                                            type="password"
-                                            value={passwordData.newPassword}
-                                            onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-                                            required
-                                            minLength={8}
-                                        />
-                                        <p className="text-sm text-gray-500 mt-1">Minimum 8 znaków</p>
-                                    </div>
-
-                                    <div className="mb-6">
-                                        <label className="block text-gray-700 font-semibold mb-2">
-                                            Potwierdź nowe hasło
-                                        </label>
-                                        <input
-                                            type="password"
-                                            value={passwordData.confirmPassword}
-                                            onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-                                            required
-                                            minLength={8}
-                                        />
-                                    </div>
-
-                                    <button
-                                        type="submit"
-                                        className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold text-lg"
-                                    >
-                                        Zmień hasło
-                                    </button>
-                                </form>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600 font-medium">Ładowanie profilu...</p>
         </div>
+      </div>
     );
+  }
+
+  return (
+    <Layout user={user}>
+      <div className="max-w-6xl mx-auto px-6 py-10">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Lewy panel */}
+          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">👤 Twój profil</h2>
+            <div className="relative inline-block mb-4">
+              {preview || user.profile?.avatar_url ? (
+                <img
+                  src={preview || user.profile.avatar_url}
+                  alt="Avatar"
+                  className="w-32 h-32 rounded-full border-4 border-indigo-500 object-cover mx-auto"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto border-4 border-indigo-400 text-white text-3xl font-bold">
+                  {user.username ? user.username[0].toUpperCase() : '?'}
+                </div>
+              )}
+              <label className="absolute bottom-0 right-0 bg-indigo-600 text-white rounded-full p-2 cursor-pointer shadow-lg hover:bg-indigo-700 transition">
+                <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                ✏️
+              </label>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-700">{user.username}</h3>
+            <p className="text-sm text-gray-500">{user.email}</p>
+          </div>
+
+          {/* Prawy panel */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Formularz profilu */}
+            <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                <span className="text-2xl">🧩</span> Dane konta
+              </h2>
+              <form onSubmit={handleProfileUpdate} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Nazwa użytkownika</label>
+                  <input
+                    type="text"
+                    value={profileData.username}
+                    onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Adres e-mail</label>
+                  <input
+                    type="email"
+                    value={profileData.email}
+                    onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md disabled:opacity-50"
+                >
+                  💾 Zapisz zmiany
+                </button>
+              </form>
+            </div>
+
+            {/* Formularz zmiany hasła */}
+            <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                <span className="text-2xl">🔒</span> Zmień hasło
+              </h2>
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Stare hasło</label>
+                  <input
+                    type="password"
+                    value={passwordData.old_password}
+                    onChange={(e) => setPasswordData({ ...passwordData, old_password: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Nowe hasło</label>
+                  <input
+                    type="password"
+                    value={passwordData.new_password}
+                    onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Powtórz nowe hasło</label>
+                  <input
+                    type="password"
+                    value={passwordData.confirm_password}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-3 bg-gradient-to-r from-green-500 to-green-700 text-white rounded-xl font-semibold hover:from-green-600 hover:to-green-800 transition-all shadow-md disabled:opacity-50"
+                >
+                  🔑 Zmień hasło
+                </button>
+              </form>
+            </div>
+
+            {(successMsg || errorMsg) && (
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                {successMsg && <p className="text-green-600 font-semibold">{successMsg}</p>}
+                {errorMsg && <p className="text-red-600 font-semibold">{errorMsg}</p>}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
 }

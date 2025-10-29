@@ -214,4 +214,18 @@ export const resetPasswordWithCode = async (email, code, newPassword) => {
     return response.data;
 };
 
+export async function adminSearchUsers(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return api.get(`/admin/users/search/?${query}`).then(res => res.data);
+}
+
+export async function adminGetUserQuizzes(userId) {
+  return api.get(`/admin/users/${userId}/quizzes/`).then(res => res.data);
+}
+
+export async function adminDeleteQuizSession(sessionId) {
+  return api.delete(`/admin/sessions/${sessionId}/delete/`).then(res => res.data);
+}
+
+
 export default api;

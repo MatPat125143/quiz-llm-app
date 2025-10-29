@@ -582,7 +582,8 @@ def submit_answer(request):
         session=session,
         selected_answer=selected_answer,
         is_correct=is_correct,
-        response_time=response_time
+        response_time=response_time,
+        difficulty_at_answer = session.current_difficulty
     )
 
     # Zaktualizuj statystyki sesji
@@ -633,6 +634,12 @@ def submit_answer(request):
 
     # Sprawdź czy quiz zakończony
     quiz_completed = session.total_questions >= session.questions_count
+
+    if quiz_completed:
+        session.is_completed = True
+        session.ended_at = timezone.now()
+        session.save()
+        print(f"🏁 Quiz {session.id} completed!")
 
     if not quiz_completed:
         try:
@@ -762,24 +769,42 @@ def quiz_details(request, session_id):
     print(f"👤 Request from user: {request.user} (id={request.user.id})")
     print(f"🔍 Looking for session {session_id}...")
 
-    session = get_object_or_404(QuizSession, id=session_id, user=request.user)
+    # 🔹 Admin może przeglądać wszystkie quizy
+    try:
+        user_role = request.user.profile.role
+    except Exception:
+        user_role = 'user'
 
-    # Pobierz wszystkie odpowiedzi użytkownika wraz z pytaniami
-    answers = Answer.objects.filter(
-        session=session,
-        user=request.user
-    ).select_related('question').order_by('answered_at')
+    if user_role == 'admin':
+        session = get_object_or_404(QuizSession, id=session_id)
+    else:
+        session = get_object_or_404(QuizSession, id=session_id, user=request.user)
+
+    # 🔹 Pobierz odpowiedzi przypisane do tej sesji
+    answers = Answer.objects.filter(session=session).select_related('question').order_by('answered_at')
 
     print(f"📦 Found {answers.count()} answers for this session")
 
-    # Użyj poprawnego serializera
+    # 🔹 Serializacja danych
     answers_data = AnswerSerializer(answers, many=True).data
     session_data = QuizSessionSerializer(session).data
 
+    # 🔹 Progres trudności (jeśli quiz adaptacyjny)
+    difficulty_progress = []
+    if session.use_adaptive_difficulty:
+        for i, ans in enumerate(answers):
+            difficulty_progress.append({
+                "question_number": i + 1,
+                "answered_at": ans.answered_at,
+                "difficulty": float(ans.difficulty_at_answer)
+            })
+
     return Response({
         'session': session_data,
-        'answers': answers_data
+        'answers': answers_data,
+        'difficulty_progress': difficulty_progress
     })
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
