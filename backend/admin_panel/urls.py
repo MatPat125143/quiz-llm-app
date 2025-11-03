@@ -9,4 +9,5 @@ urlpatterns = [
     path('sessions/<int:session_id>/delete/', views.delete_quiz_session, name='admin-delete-session'),
     path('users/<int:user_id>/delete/', views.delete_user, name='admin-delete-user'),
     path('users/<int:user_id>/role/', views.change_user_role, name='admin-change-role'),
+    path('users/<int:user_id>/toggle/', views.toggle_user_status),
 ]

@@ -148,6 +148,29 @@ def delete_user(request, user_id):
 
 @api_view(['PATCH'])
 @permission_classes([IsAdminUser])
+def toggle_user_status(request, user_id):
+    """Aktywuj/dezaktywuj użytkownika"""
+    try:
+        user = User.objects.get(id=user_id)
+
+        # Nie pozwól wyłączyć samego siebie
+        if user == request.user:
+            return Response({'error': 'Nie możesz dezaktywować swojego konta.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        user.is_active = not user.is_active
+        user.save()
+
+        return Response({
+            'message': f'Użytkownik {user.username} {"aktywowany" if user.is_active else "dezaktywowany"}',
+            'is_active': user.is_active
+        })
+    except User.DoesNotExist:
+        return Response({'error': 'Użytkownik nie znaleziony'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAdminUser])
 def change_user_role(request, user_id):
     new_role = request.data.get('role')
     if new_role not in ['user', 'admin']:

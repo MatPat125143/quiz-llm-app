@@ -5,7 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="88f636d6-4406-47a5-82d3-6152c6506ebc" name="Changes" comment="no key">
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/QuestionsLibrary.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/QuestionsLibrary.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/admin_panel/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/admin_panel/urls.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/admin_panel/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/admin_panel/views.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -100,6 +103,11 @@
       <workItem from="1761507657767" duration="9000" />
       <workItem from="1761568289662" duration="21815000" />
       <workItem from="1761725767097" duration="7271000" />
+      <workItem from="1761745746587" duration="877000" />
+      <workItem from="1761756312563" duration="2138000" />
+      <workItem from="1761843701043" duration="6000" />
+      <workItem from="1762101253906" duration="7140000" />
+      <workItem from="1762185132978" duration="2322000" />
     </task>
     <task id="LOCAL-00001" summary="AI modle on">
       <option name="closed" value="true" />
