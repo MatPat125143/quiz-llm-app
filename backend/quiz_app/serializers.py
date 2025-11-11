@@ -41,7 +41,7 @@ class QuizSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuizSession
         fields = [
-            'id', 'username', 'topic',
+            'id', 'username', 'topic', 'subtopic', 'knowledge_level',  # <-- DODANE subtopic i knowledge_level
             'initial_difficulty', 'difficulty', 'current_difficulty',
             'initial_difficulty_value',          # <-- DODANE
             'started_at', 'ended_at', 'completed_at', 'is_completed',

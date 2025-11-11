@@ -4,12 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="88f636d6-4406-47a5-82d3-6152c6506ebc" name="Changes" comment="no key">
-      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/admin_panel/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/admin_panel/urls.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/admin_panel/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/admin_panel/views.py" afterDir="false" />
-    </list>
+    <list default="true" id="88f636d6-4406-47a5-82d3-6152c6506ebc" name="Changes" comment="no key" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -108,6 +103,8 @@
       <workItem from="1761843701043" duration="6000" />
       <workItem from="1762101253906" duration="7140000" />
       <workItem from="1762185132978" duration="2322000" />
+      <workItem from="1762794200448" duration="13906000" />
+      <workItem from="1762861241778" duration="16068000" />
     </task>
     <task id="LOCAL-00001" summary="AI modle on">
       <option name="closed" value="true" />

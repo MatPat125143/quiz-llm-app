@@ -123,9 +123,11 @@ export const deleteAvatar = async () => {
 
 // ==================== QUIZ ====================
 
-export const startQuiz = async (topic, difficulty, questionsCount, timePerQuestion, useAdaptiveDifficulty) => {
+export const startQuiz = async (topic, difficulty, questionsCount, timePerQuestion, useAdaptiveDifficulty, subtopic = '', knowledgeLevel = 'high_school') => {
     const response = await api.post('/quiz/start/', {
         topic,
+        subtopic,
+        knowledge_level: knowledgeLevel,
         difficulty,
         questions_count: questionsCount,
         time_per_question: timePerQuestion,

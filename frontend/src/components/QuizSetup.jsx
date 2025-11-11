@@ -6,6 +6,8 @@ import Layout from './Layout';
 export default function QuizSetup() {
   const [user, setUser] = useState(null);
   const [topic, setTopic] = useState('');
+  const [subtopic, setSubtopic] = useState('');
+  const [knowledgeLevel, setKnowledgeLevel] = useState('high_school');
   const [difficulty, setDifficulty] = useState('medium');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,6 +42,26 @@ export default function QuizSetup() {
     'Język angielski',
   ];
 
+  // Przykładowe podtematy dla każdego tematu
+  const topicSubtopics = {
+    'Matematyka': ['Algebra', 'Geometria', 'Trygonometria', 'Analiza matematyczna', 'Statystyka', 'Wielomiany', 'Funkcje'],
+    'Fizyka': ['Mechanika', 'Termodynamika', 'Elektryczność', 'Magnetyzm', 'Optyka', 'Fizyka jądrowa'],
+    'Chemia': ['Chemia organiczna', 'Chemia nieorganiczna', 'Chemia fizyczna', 'Biochemia', 'Stechiometria'],
+    'Biologia': ['Genetyka', 'Ekologia', 'Anatomia', 'Fizjologia', 'Ewolucja', 'Botanika', 'Zoologia'],
+    'Historia': ['Starożytność', 'Średniowiecze', 'Nowożytność', 'Historia Polski', 'Historia powszechna', 'XX wiek'],
+    'Geografia': ['Geografia fizyczna', 'Geografia społeczno-ekonomiczna', 'Klimatologia', 'Geologia'],
+    'Język polski': ['Literatura', 'Gramatyka', 'Ortografia', 'Lektury', 'Części mowy', 'Składnia'],
+    'Język angielski': ['Gramatyka', 'Słownictwo', 'Czasy gramatyczne', 'Phrasal verbs', 'Idiomy'],
+    'Wiedza o społeczeństwie': ['Prawo', 'Polityka', 'Ekonomia', 'Socjologia', 'Prawa człowieka'],
+  };
+
+  const knowledgeLevels = [
+    { key: 'elementary', label: 'Szkoła podstawowa', emoji: '📚' },
+    { key: 'high_school', label: 'Liceum', emoji: '🎓' },
+    { key: 'university', label: 'Studia', emoji: '🎯' },
+    { key: 'expert', label: 'Ekspert', emoji: '🏆' },
+  ];
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!topic.trim()) {
@@ -56,7 +78,9 @@ export default function QuizSetup() {
         difficulty,
         questionsCount,
         timePerQuestion,
-        useAdaptiveDifficulty
+        useAdaptiveDifficulty,
+        subtopic,
+        knowledgeLevel
       );
       navigate(`/quiz/play/${response.session_id}`);
     } catch (err) {
@@ -119,6 +143,73 @@ export default function QuizSetup() {
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            {/* Podtemat */}
+            {topic && topicSubtopics[topic] && (
+              <div>
+                <label className="block text-lg font-bold text-gray-800 mb-3">
+                  Podtemat (opcjonalnie)
+                </label>
+                <input
+                  type="text"
+                  value={subtopic}
+                  onChange={(e) => setSubtopic(e.target.value)}
+                  placeholder="Wprowadź własny podtemat lub wybierz poniżej"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-all mb-3"
+                  disabled={loading}
+                />
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {topicSubtopics[topic].map((sub) => (
+                    <button
+                      key={sub}
+                      type="button"
+                      onClick={() => setSubtopic(sub)}
+                      className={`px-3 py-2 rounded-lg border-2 text-sm font-semibold transition-all ${
+                        subtopic === sub
+                          ? 'bg-indigo-100 border-indigo-500 text-indigo-700'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-300'
+                      }`}
+                      disabled={loading}
+                    >
+                      {sub}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSubtopic('')}
+                  className="mt-2 text-sm text-gray-500 hover:text-gray-700 underline"
+                  disabled={loading}
+                >
+                  Wyczyść podtemat
+                </button>
+              </div>
+            )}
+
+            {/* Poziom wiedzy */}
+            <div>
+              <label className="block text-lg font-bold text-gray-800 mb-3">
+                Poziom wiedzy
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {knowledgeLevels.map((level) => (
+                  <button
+                    key={level.key}
+                    type="button"
+                    onClick={() => setKnowledgeLevel(level.key)}
+                    className={`py-3 rounded-xl border-2 font-semibold transition-all ${
+                      knowledgeLevel === level.key
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-transparent shadow-md'
+                        : 'bg-gray-50 text-gray-800 border-gray-200 hover:border-indigo-400'
+                    }`}
+                    disabled={loading}
+                  >
+                    <div className="text-2xl mb-1">{level.emoji}</div>
+                    <div className="text-xs">{level.label}</div>
+                  </button>
+                ))}
               </div>
             </div>
 

@@ -4,8 +4,17 @@ import hashlib
 
 
 class QuizSession(models.Model):
+    KNOWLEDGE_LEVEL_CHOICES = [
+        ('elementary', 'Szkoła podstawowa'),
+        ('high_school', 'Liceum'),
+        ('university', 'Studia'),
+        ('expert', 'Ekspert'),
+    ]
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='quiz_sessions')
     topic = models.CharField(max_length=200)
+    subtopic = models.CharField(max_length=200, blank=True, null=True)  # NOWE: podtemat
+    knowledge_level = models.CharField(max_length=20, choices=KNOWLEDGE_LEVEL_CHOICES, default='high_school')  # NOWE: poziom wiedzy
     initial_difficulty = models.CharField(max_length=20)
     current_difficulty = models.FloatField(default=1.0)
     started_at = models.DateTimeField(auto_now_add=True)
@@ -17,6 +26,7 @@ class QuizSession(models.Model):
     questions_count = models.IntegerField(default=10)
     time_per_question = models.IntegerField(default=30)
     use_adaptive_difficulty = models.BooleanField(default=True)
+    questions_generated_count = models.IntegerField(default=0)  # NOWE: licznik wygenerowanych pytań dla seryjnego generowania
 
     class Meta:
         ordering = ['-started_at']
@@ -45,6 +55,13 @@ class Question(models.Model):
         ('trudny', 'Trudny'),
     ]
 
+    KNOWLEDGE_LEVEL_CHOICES = [
+        ('elementary', 'Szkoła podstawowa'),
+        ('high_school', 'Liceum'),
+        ('university', 'Studia'),
+        ('expert', 'Ekspert'),
+    ]
+
     # session teraz OPCJONALNE (dla kompatybilności)
     session = models.ForeignKey(
         QuizSession,
@@ -56,6 +73,8 @@ class Question(models.Model):
 
     # NOWE POLA dla globalnych pytań
     topic = models.CharField(max_length=200, db_index=True)
+    subtopic = models.CharField(max_length=200, blank=True, null=True, db_index=True)  # NOWE: podtemat
+    knowledge_level = models.CharField(max_length=20, choices=KNOWLEDGE_LEVEL_CHOICES, blank=True, null=True)  # NOWE: poziom wiedzy
     question_text = models.TextField()
     correct_answer = models.CharField(max_length=500)
     wrong_answer_1 = models.CharField(max_length=500)
@@ -111,7 +130,7 @@ class Question(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.content_hash:
-            content = f"{self.question_text}{self.correct_answer}{self.topic}{self.difficulty_level}"
+            content = f"{self.question_text}{self.correct_answer}{self.topic}{self.subtopic or ''}{self.knowledge_level or ''}{self.difficulty_level}"
             self.content_hash = hashlib.sha256(content.encode()).hexdigest()
         super().save(*args, **kwargs)
 

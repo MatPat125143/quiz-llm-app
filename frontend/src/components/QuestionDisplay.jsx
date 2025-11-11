@@ -14,9 +14,11 @@ export default function QuestionDisplay() {
     const [timeLeft, setTimeLeft] = useState(30);
     const [startTime, setStartTime] = useState(null);
     const [error, setError] = useState('');
+    const [quizCompleted, setQuizCompleted] = useState(false);
 
     // Prevent duplicate loading in React StrictMode
     const loadedRef = useRef(false);
+    const cleanupRef = useRef(false);
 
     // Timer
     useEffect(() => {
@@ -35,6 +37,42 @@ export default function QuestionDisplay() {
             loadQuestion();
         }
     }, []);
+
+    // Cleanup: usuń sesję jeśli użytkownik opuści stronę przed ukończeniem quizu
+    useEffect(() => {
+        let shouldCleanup = false;
+
+        const handleBeforeUnload = (e) => {
+            if (!quizCompleted && !cleanupRef.current) {
+                cleanupRef.current = true;
+                navigator.sendBeacon(`http://localhost:8000/api/quiz/end/${sessionId}/`);
+            }
+        };
+
+        const handleNavigateAway = async () => {
+            shouldCleanup = true;
+
+            if (!quizCompleted && !cleanupRef.current) {
+                cleanupRef.current = true;
+                try {
+                    await endQuiz(sessionId);
+                    console.log('🗑️ Incomplete session cleanup on navigation');
+                } catch (err) {
+                    console.error('Error cleaning up session:', err);
+                }
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+
+            if (shouldCleanup) {
+                handleNavigateAway();
+            }
+        };
+    }, [sessionId, quizCompleted]);
 
     const loadQuestion = async () => {
         try {
@@ -109,6 +147,7 @@ export default function QuestionDisplay() {
 
             // Jeśli quiz zakończony → przekieruj po chwili
             if (data.quiz_completed) {
+                setQuizCompleted(true);
                 setTimeout(() => {
                     navigate(`/quiz/details/${sessionId}`);
                 }, 3000);

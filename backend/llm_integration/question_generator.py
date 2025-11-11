@@ -22,6 +22,7 @@ class QuestionGenerator:
         # Inicjalizuj klienta OpenAI
         try:
             from openai import OpenAI
+            # POPRAWKA: Bez 'proxies' parametru
             self.client = OpenAI(api_key=self.api_key)
             print("✅ OpenAI client initialized successfully")
         except ImportError:
@@ -46,7 +47,25 @@ class QuestionGenerator:
         else:
             return 'trudny'
 
-    def generate_multiple_questions(self, topic, difficulty, count):
+    def _get_knowledge_level_description(self, knowledge_level):
+        """
+        Zwraca opis poziomu wiedzy dla promptu AI.
+
+        Args:
+            knowledge_level: 'elementary', 'high_school', 'university', 'expert'
+
+        Returns:
+            str: Opis poziomu po polsku
+        """
+        descriptions = {
+            'elementary': 'szkoła podstawowa (klasy 1-8)',
+            'high_school': 'liceum (szkoła średnia)',
+            'university': 'studia wyższe',
+            'expert': 'poziom ekspercki (zaawansowany)'
+        }
+        return descriptions.get(knowledge_level, 'liceum (szkoła średnia)')
+
+    def generate_multiple_questions(self, topic, difficulty, count, subtopic=None, knowledge_level='high_school'):
         """
         Generuje wiele RÓŻNORODNYCH pytań na raz.
         Używane dla stałych poziomów trudności.
@@ -55,6 +74,8 @@ class QuestionGenerator:
             topic (str): Temat pytań (np. "Matematyka", "Historia")
             difficulty (float): Poziom trudności 1-10 (lub str: 'łatwy', 'średni', 'trudny')
             count (int): Ile pytań wygenerować
+            subtopic (str): Podtemat (np. "Algebra", "Geometria") - opcjonalnie
+            knowledge_level (str): Poziom wiedzy ('elementary', 'high_school', 'university', 'expert')
 
         Returns:
             list: Lista słowników z pytaniami
@@ -72,14 +93,14 @@ class QuestionGenerator:
 
         # Generuj pytania używając OpenAI
         try:
-            print(f"🤖 Generating {count} DIVERSE AI questions for topic: {topic}, difficulty: {difficulty_text}")
-            return self._generate_multiple_ai_questions(topic, difficulty_text, count)
+            print(f"🤖 Generating {count} DIVERSE AI questions for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}")
+            return self._generate_multiple_ai_questions(topic, difficulty_text, count, subtopic, knowledge_level)
         except Exception as e:
             print(f"❌ Error generating multiple AI questions: {e}")
             print(f"📝 Falling back to predefined questions")
             return [self._generate_fallback_question(topic, difficulty_text) for _ in range(count)]
 
-    def _generate_multiple_ai_questions(self, topic, difficulty, count):
+    def _generate_multiple_ai_questions(self, topic, difficulty, count, subtopic=None, knowledge_level='high_school'):
         """Generuje wiele różnorodnych pytań używając OpenAI API"""
 
         # Mapuj poziom trudności na opis dla AI
@@ -90,26 +111,34 @@ class QuestionGenerator:
         }
         difficulty_desc = difficulty_descriptions.get(difficulty, 'umiarkowany')
 
-        # Przygotuj prompt dla AI - WAŻNE: podkreśl różnorodność!
+        # Opis poziomu wiedzy
+        knowledge_desc = self._get_knowledge_level_description(knowledge_level)
+
+        # Informacja o podtemacie
+        subtopic_info = f"\n- Podtemat: {subtopic}" if subtopic else ""
+
+        # Przygotuj prompt dla AI-WAŻNE: podkreśl różnorodność!
         system_prompt = """Jesteś ekspertem od tworzenia pytań edukacyjnych.
 Tworzysz pytania quizowe w języku polskim.
 ZAWSZE odpowiadasz w formacie JSON bez dodatkowego tekstu.
 WAŻNE: Pytania muszą być RÓŻNORODNE i dotyczyć RÓŻNYCH aspektów tematu!"""
 
         user_prompt = f"""Wygeneruj {count} RÓŻNORODNYCH pytań quizowych:
-- Temat: {topic}
-- Poziom trudności: {difficulty} ({difficulty_desc})
+- Temat: {topic}{subtopic_info}
+- Poziom edukacyjny ucznia: {knowledge_desc}
+- Poziom trudności pytania: {difficulty} ({difficulty_desc})
 - WAŻNE: Każde pytanie musi dotyczyć INNEGO aspektu tematu!
 - WAŻNE: Unikaj powtarzania tego samego typu pytań!
 - WAŻNE: Zmień kontekst, liczby, przykłady w każdym pytaniu!
+- WAŻNE: Dostosuj język i złożoność do poziomu: {knowledge_desc}
 
 Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
 [
   {{
-    "question": "treść pytania 1 po polsku",
+    "question": "treść pytania 1 po polsku (dostosowana do poziomu {knowledge_desc})",
     "correct_answer": "poprawna odpowiedź 1",
     "wrong_answers": ["błędna 1.1", "błędna 1.2", "błędna 1.3"],
-    "explanation": "krótkie wyjaśnienie 1 po polsku"
+    "explanation": "krótkie wyjaśnienie 1 po polsku (dostosowane do poziomu {knowledge_desc})"
   }},
   {{
     "question": "treść pytania 2 po polsku (INNY aspekt tematu!)",
@@ -159,13 +188,15 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
         print(f"✅ Generated {len(questions_data)} diverse AI questions successfully")
         return questions_data
 
-    def generate_question(self, topic, difficulty):
+    def generate_question(self, topic, difficulty, subtopic=None, knowledge_level='high_school'):
         """
         Generuje pytanie quizowe
 
         Args:
             topic (str): Temat pytania (np. "Matematyka", "Historia")
             difficulty (float lub str): Poziom trudności 1-10 lub 'łatwy'/'średni'/'trudny'
+            subtopic (str): Podtemat (np. "Algebra", "Geometria") - opcjonalnie
+            knowledge_level (str): Poziom wiedzy ('elementary', 'high_school', 'university', 'expert')
 
         Returns:
             dict: Słownik z pytaniem, odpowiedziami i wyjaśnieniem
@@ -183,14 +214,14 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
 
         # Generuj pytanie używając OpenAI
         try:
-            print(f"🤖 Generating AI question for topic: {topic}, difficulty: {difficulty_text}")
-            return self._generate_ai_question(topic, difficulty_text)
+            print(f"🤖 Generating AI question for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}")
+            return self._generate_ai_question(topic, difficulty_text, subtopic, knowledge_level)
         except Exception as e:
             print(f"❌ Error generating AI question: {e}")
             print(f"📝 Falling back to predefined questions")
             return self._generate_fallback_question(topic, difficulty_text)
 
-    def _generate_ai_question(self, topic, difficulty):
+    def _generate_ai_question(self, topic, difficulty, subtopic=None, knowledge_level='high_school'):
         """Generuje pytanie używając OpenAI API"""
 
         # Mapuj poziom trudności na opis dla AI
@@ -201,21 +232,29 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
         }
         difficulty_desc = difficulty_descriptions.get(difficulty, 'umiarkowany')
 
+        # Opis poziomu wiedzy
+        knowledge_desc = self._get_knowledge_level_description(knowledge_level)
+
+        # Informacja o podtemacie
+        subtopic_info = f"\n- Podtemat: {subtopic}" if subtopic else ""
+
         # Przygotuj prompt dla AI
         system_prompt = """Jesteś ekspertem od tworzenia pytań edukacyjnych.
 Tworzysz pytania quizowe w języku polskim.
 ZAWSZE odpowiadasz w formacie JSON bez dodatkowego tekstu."""
 
         user_prompt = f"""Wygeneruj pytanie quizowe:
-- Temat: {topic}
-- Poziom trudności: {difficulty} ({difficulty_desc})
+- Temat: {topic}{subtopic_info}
+- Poziom edukacyjny ucznia: {knowledge_desc}
+- Poziom trudności pytania: {difficulty} ({difficulty_desc})
+- WAŻNE: Dostosuj język i złożoność do poziomu: {knowledge_desc}
 
 Zwróć odpowiedź w DOKŁADNIE tym formacie JSON:
 {{
-    "question": "treść pytania po polsku",
+    "question": "treść pytania po polsku (dostosowana do poziomu {knowledge_desc})",
     "correct_answer": "poprawna odpowiedź",
     "wrong_answers": ["błędna odpowiedź 1", "błędna odpowiedź 2", "błędna odpowiedź 3"],
-    "explanation": "krótkie wyjaśnienie poprawnej odpowiedzi po polsku"
+    "explanation": "krótkie wyjaśnienie poprawnej odpowiedzi po polsku (dostosowane do poziomu {knowledge_desc})"
 }}"""
 
         # Wywołaj OpenAI API
