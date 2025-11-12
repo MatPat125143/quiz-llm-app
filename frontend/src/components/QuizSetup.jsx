@@ -86,10 +86,39 @@ export default function QuizSetup() {
     } catch (err) {
       console.error(err);
       setError('Nie udało się uruchomić quizu. Spróbuj ponownie.');
-    } finally {
       setLoading(false);
     }
   };
+
+   if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600">
+        <div className="bg-white p-12 rounded-2xl shadow-2xl text-center max-w-md">
+          <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-blue-600 mx-auto mb-6"></div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">
+            🚀 Przygotowuję quiz...
+          </h2>
+          <p className="text-gray-600 mb-4">
+            Tworzę spersonalizowany quiz na temat: <strong>{topic}</strong>
+          </p>
+          <div className="mt-6 space-y-2">
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+              <span>Inicjalizacja sesji...</span>
+            </div>
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+              <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse delay-100"></div>
+              <span>Przygotowywanie pytań...</span>
+            </div>
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+              <div className="w-2 h-2 bg-pink-500 rounded-full animate-pulse delay-200"></div>
+              <span>Za chwilę rozpoczniemy!</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Layout user={user}>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getQuizDetails, getCurrentUser, logout } from '../services/api';
+import { getQuizDetails, getCurrentUser } from '../services/api';
 import {
   Chart as ChartJS,
   LineElement,
@@ -15,7 +15,6 @@ import annotationPlugin from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
 import Layout from './Layout';
 
-// ✅ Rejestracja wszystkich wymaganych elementów Chart.js
 ChartJS.register(
   LineElement,
   CategoryScale,
@@ -54,9 +53,14 @@ export default function QuizDetails() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const getKnowledgeLevelLabel = (level) => {
+    const labels = {
+      elementary: '🎓 Podstawowy',
+      high_school: '📚 Licealny',
+      university: '🎓 Uniwersytecki',
+      expert: '👨‍🔬 Ekspercki'
+    };
+    return labels[level] || level;
   };
 
   if (loading) {
@@ -89,7 +93,6 @@ export default function QuizDetails() {
 
   const session = quiz.session;
 
-  // 🔹 Dane do wykresu adaptacyjnego
   const difficultyData = quiz.difficulty_progress || [];
   const chartData = {
     labels: difficultyData.map((_, i) => `Pytanie ${i + 1}`),
@@ -100,14 +103,13 @@ export default function QuizDetails() {
         borderColor: 'rgba(79, 70, 229, 0.9)',
         backgroundColor: 'rgba(79, 70, 229, 0.15)',
         tension: 0.3,
-        fill: false, // ⛔ brak wypełnienia pod linią
+        fill: false,
         pointRadius: 5,
         pointBackgroundColor: '#4f46e5'
       }
     ]
   };
 
-  // 🔸 Trzy poziomy trudności: łatwy / średni / trudny
   const chartOptions = {
     responsive: true,
     scales: {
@@ -181,15 +183,36 @@ export default function QuizDetails() {
     }
   };
 
+  const quizDuration = session.started_at && session.ended_at
+    ? Math.round((new Date(session.ended_at) - new Date(session.started_at)) / 1000)
+    : 0;
+
+  const averageResponseTime = quiz.answers && quiz.answers.length > 0
+    ? Math.round(quiz.answers.reduce((sum, ans) => sum + (ans.response_time || 0), 0) / quiz.answers.length)
+    : 0;
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins}min ${secs}s`;
+    }
+    return `${secs}s`;
+  };
+
   return (
     <Layout user={user}>
       <div className="max-w-6xl mx-auto px-6 py-10">
-        {/* Nagłówek */}
         <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100 mb-10">
           <div className="flex justify-between flex-wrap gap-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
                 📋 {session.topic}
+                {session.subtopic && (
+                  <span className="text-2xl font-semibold text-indigo-600">
+                    → {session.subtopic}
+                  </span>
+                )}
               </h1>
               <p className="text-gray-600 mt-2">
                 {new Date(session.ended_at || session.completed_at).toLocaleString('pl-PL', {
@@ -210,7 +233,6 @@ export default function QuizDetails() {
             </div>
           </div>
 
-          {/* Tagi */}
           <div className="flex flex-wrap gap-3 mt-4">
             <span
               className={`px-4 py-1.5 rounded-full text-sm font-semibold ${
@@ -226,15 +248,31 @@ export default function QuizDetails() {
               {session.difficulty === 'hard' && '🔴 Trudny'}
             </span>
 
+            {session.knowledge_level && (
+              <span className="px-4 py-1.5 bg-indigo-100 text-indigo-800 rounded-full text-sm font-semibold">
+                {getKnowledgeLevelLabel(session.knowledge_level)}
+              </span>
+            )}
+
             {session.use_adaptive_difficulty && (
               <span className="px-4 py-1.5 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
                 🎯 Adaptacyjny quiz
               </span>
             )}
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-100">
+              <p className="text-sm text-gray-600 mb-1">⏱️ Całkowity czas quizu</p>
+              <p className="text-2xl font-bold text-indigo-600">{formatTime(quizDuration)}</p>
+            </div>
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
+              <p className="text-sm text-gray-600 mb-1">⚡ Średni czas odpowiedzi</p>
+              <p className="text-2xl font-bold text-green-600">{formatTime(averageResponseTime)}</p>
+            </div>
+          </div>
         </div>
 
-        {/* 🔹 Wykres trudności (tylko dla adaptacyjnych) */}
         {session.use_adaptive_difficulty && difficultyData.length > 0 && (
           <div className="bg-white rounded-2xl p-6 mb-10 shadow-lg border border-gray-100">
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -244,7 +282,6 @@ export default function QuizDetails() {
           </div>
         )}
 
-        {/* 🔹 Lista pytań i przyciski zostają bez zmian */}
         <div className="space-y-6">
           {quiz.answers.map((question, index) => {
             const answers = [
@@ -260,9 +297,14 @@ export default function QuizDetails() {
                 className="bg-white rounded-2xl shadow-md border border-gray-100 p-6"
               >
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-gray-800">
-                    Pytanie {index + 1} z {session.total_questions}
-                  </h3>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-800">
+                      Pytanie {index + 1} z {session.total_questions}
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      ⏱️ Czas odpowiedzi: <span className="font-semibold text-indigo-600">{formatTime(question.response_time || 0)}</span>
+                    </p>
+                  </div>
                   {question.is_correct ? (
                     <span className="px-4 py-1 bg-green-100 text-green-700 rounded-full font-semibold">
                       ✅ Poprawnie
@@ -285,7 +327,7 @@ export default function QuizDetails() {
                     return (
                       <div
                         key={key}
-                        className={`p-3 rounded-lg border transition ${
+                        className={`p-3 rounded-xl border-2 transition-all ${
                           isCorrect
                             ? 'bg-green-50 border-green-400'
                             : wrongSelected
@@ -293,14 +335,21 @@ export default function QuizDetails() {
                             : 'bg-gray-50 border-gray-200'
                         }`}
                       >
-                        <strong>{key}.</strong> {text}
-                        {isSelected && (
-                          <span
-                            className={`ml-2 text-sm font-semibold ${
-                              isCorrect ? 'text-green-700' : 'text-red-700'
-                            }`}
-                          >
-                            {isCorrect ? '(Twoja poprawna odpowiedź)' : '(Twoja błędna odpowiedź)'}
+                        <span className="font-bold text-indigo-600 mr-2">{key}.</span>
+                        <span className="text-gray-800 break-words">{text}</span>
+                        {isCorrect && isSelected && (
+                          <span className="ml-3 px-2 py-0.5 rounded-lg text-xs bg-green-600 text-white font-semibold">
+                            ✅ Twoja odpowiedź
+                          </span>
+                        )}
+                        {isCorrect && !isSelected && (
+                          <span className="ml-3 px-2 py-0.5 rounded-lg text-xs bg-green-600 text-white font-semibold">
+                            ✅ Poprawna
+                          </span>
+                        )}
+                        {wrongSelected && (
+                          <span className="ml-3 px-2 py-0.5 rounded-lg text-xs bg-red-600 text-white font-semibold">
+                            ❌ Twoja odpowiedź
                           </span>
                         )}
                       </div>
@@ -319,7 +368,6 @@ export default function QuizDetails() {
           })}
         </div>
 
-        {/* Przyciski akcji */}
         <div className="flex flex-col sm:flex-row gap-4 mt-10">
           <button
             onClick={() => navigate('/dashboard')}

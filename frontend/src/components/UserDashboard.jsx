@@ -28,6 +28,21 @@ export default function UserDashboard() {
     }
   };
 
+  const calculatePercentage = (quiz) => {
+    if (!quiz.total_questions || quiz.total_questions === 0) return 0;
+    return Math.round((quiz.correct_answers / quiz.total_questions) * 100);
+  };
+
+  const getKnowledgeLevelLabel = (level) => {
+    const labels = {
+      elementary: '🎓 Podstawowy',
+      high_school: '📚 Licealny',
+      university: '🎓 Uniwersytecki',
+      expert: '👨‍🔬 Ekspercki'
+    };
+    return labels[level] || level;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -156,67 +171,99 @@ export default function UserDashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              {quizzes.map((quiz) => {
-                const accuracy =
-                  typeof quiz.accuracy === 'number'
-                    ? (quiz.accuracy * (quiz.accuracy <= 1 ? 100 : 1))
-                    : '0';
-                return (
-                  <div
-                    key={quiz.id}
-                    onClick={() => navigate(`/quiz/details/${quiz.id}`)}
-                    className="group p-5 border-2 border-gray-100 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer bg-gradient-to-r from-white to-gray-50"
-                  >
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-bold text-gray-800 group-hover:text-indigo-600 transition-colors">
-                            📚 {quiz.topic}
-                          </h3>
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              quiz.difficulty === 'easy'
-                                ? 'bg-green-100 text-green-700'
-                                : quiz.difficulty === 'medium'
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-red-100 text-red-700'
-                            }`}
-                          >
-                            {quiz.difficulty === 'easy' && '🟢 Łatwy'}
-                            {quiz.difficulty === 'medium' && '🟡 Średni'}
-                            {quiz.difficulty === 'hard' && '🔴 Trudny'}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                          <span>📊 {accuracy}%</span>
-                          <span>
-                            ✅ {quiz.correct_answers}/{quiz.total_questions}
-                          </span>
-                          <span>
-                            📅{' '}
-                            {new Date(quiz.started_at).toLocaleDateString('pl-PL')}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-indigo-400 group-hover:text-indigo-600 transition-colors">
-                        <svg
-                          className="w-6 h-6"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+              {quizzes.map((quiz) => (
+                <div
+                  key={quiz.id}
+                  onClick={() => navigate(`/quiz/details/${quiz.id}`)}
+                  className="group p-6 border-2 border-gray-100 rounded-xl hover:border-indigo-300 hover:shadow-lg transition-all cursor-pointer bg-gradient-to-r from-white to-gray-50"
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        <h3 className="text-xl font-bold text-gray-800 group-hover:text-indigo-600 transition-colors">
+                          📚 {quiz.topic}
+                        </h3>
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                            quiz.difficulty === 'easy'
+                              ? 'bg-green-100 text-green-700'
+                              : quiz.difficulty === 'medium'
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 5l7 7-7 7"
-                          />
-                        </svg>
+                          {quiz.difficulty === 'easy' && '🟢 Łatwy'}
+                          {quiz.difficulty === 'medium' && '🟡 Średni'}
+                          {quiz.difficulty === 'hard' && '🔴 Trudny'}
+                        </span>
+                        {quiz.knowledge_level && (
+                          <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold">
+                            {getKnowledgeLevelLabel(quiz.knowledge_level)}
+                          </span>
+                        )}
+                        {quiz.use_adaptive_difficulty && (
+                          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
+                            🎯 Adaptacyjny
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-6 text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">📊</span>
+                          <div>
+                            <p className="text-xs text-gray-500">Wynik</p>
+                            <p className="text-lg font-bold text-indigo-600">
+                              {calculatePercentage(quiz)}%
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">✅</span>
+                          <div>
+                            <p className="text-xs text-gray-500">Odpowiedzi</p>
+                            <p className="text-lg font-bold">
+                              {quiz.correct_answers}/{quiz.total_questions}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">📅</span>
+                          <div>
+                            <p className="text-xs text-gray-500">Data</p>
+                            <p className="text-sm font-medium">
+                              {new Date(quiz.started_at).toLocaleDateString('pl-PL', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                        {quiz.ended_at && quiz.started_at && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">⏱️</span>
+                            <div>
+                              <p className="text-xs text-gray-500">Czas</p>
+                              <p className="text-sm font-medium">
+                                {Math.floor((new Date(quiz.ended_at) - new Date(quiz.started_at)) / 60000)} min
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
+
+                    <div className="text-indigo-400 group-hover:text-indigo-600 group-hover:translate-x-2 transition-all">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>

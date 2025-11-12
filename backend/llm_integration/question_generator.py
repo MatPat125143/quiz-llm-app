@@ -22,7 +22,6 @@ class QuestionGenerator:
         # Inicjalizuj klienta OpenAI
         try:
             from openai import OpenAI
-            # POPRAWKA: Bez 'proxies' parametru
             self.client = OpenAI(api_key=self.api_key)
             print("✅ OpenAI client initialized successfully")
         except ImportError:
@@ -30,32 +29,19 @@ class QuestionGenerator:
         except Exception as e:
             print(f"⚠️  Failed to initialize OpenAI: {e}")
 
-    def _convert_numeric_to_text_difficulty(self, difficulty_float):
-        """
-        Konwertuje numeryczny poziom trudności na tekstowy.
-
-        Args:
-            difficulty_float: Poziom trudności 1.0-10.0
-
-        Returns:
-            str: 'łatwy', 'średni' lub 'trudny'
-        """
-        if difficulty_float <= 3.5:
-            return 'łatwy'
-        elif difficulty_float <= 7.0:
-            return 'średni'
-        else:
-            return 'trudny'
+    # ❌ USUŃ TĘ FUNKCJĘ - będzie w difficulty_adapter
+    # def _convert_numeric_to_text_difficulty(self, difficulty_float):
+    #     """Konwertuje numeryczny poziom trudności na tekstowy."""
+    #     if difficulty_float <= 3.5:
+    #         return 'łatwy'
+    #     elif difficulty_float <= 7.0:
+    #         return 'średni'
+    #     else:
+    #         return 'trudny'
 
     def _get_knowledge_level_description(self, knowledge_level):
         """
         Zwraca opis poziomu wiedzy dla promptu AI.
-
-        Args:
-            knowledge_level: 'elementary', 'high_school', 'university', 'expert'
-
-        Returns:
-            str: Opis poziomu po polsku
         """
         descriptions = {
             'elementary': 'szkoła podstawowa (klasy 1-8)',
@@ -68,21 +54,24 @@ class QuestionGenerator:
     def generate_multiple_questions(self, topic, difficulty, count, subtopic=None, knowledge_level='high_school'):
         """
         Generuje wiele RÓŻNORODNYCH pytań na raz.
-        Używane dla stałych poziomów trudności.
 
         Args:
-            topic (str): Temat pytań (np. "Matematyka", "Historia")
-            difficulty (float): Poziom trudności 1-10 (lub str: 'łatwy', 'średni', 'trudny')
+            topic (str): Temat pytań
+            difficulty (float lub str): Poziom trudności 1-10 LUB 'łatwy'/'średni'/'trudny'
             count (int): Ile pytań wygenerować
-            subtopic (str): Podtemat (np. "Algebra", "Geometria") - opcjonalnie
-            knowledge_level (str): Poziom wiedzy ('elementary', 'high_school', 'university', 'expert')
+            subtopic (str): Podtemat - opcjonalnie
+            knowledge_level (str): Poziom wiedzy
 
         Returns:
             list: Lista słowników z pytaniami
         """
-        # Konwertuj numeryczny poziom na tekstowy jeśli potrzeba
+        # ✅ Jeśli dostaliśmy float - zostaw jako float (do przekazania do AI)
+        # ✅ Jeśli dostaliśmy string - użyj go bezpośrednio
         if isinstance(difficulty, (int, float)):
-            difficulty_text = self._convert_numeric_to_text_difficulty(difficulty)
+            # Importuj difficulty_adapter jeśli potrzebujemy konwersji dla logów
+            from llm_integration.difficulty_adapter import DifficultyAdapter
+            adapter = DifficultyAdapter()
+            difficulty_text = adapter.get_difficulty_level(difficulty)
         else:
             difficulty_text = difficulty
 
@@ -193,17 +182,19 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
         Generuje pytanie quizowe
 
         Args:
-            topic (str): Temat pytania (np. "Matematyka", "Historia")
-            difficulty (float lub str): Poziom trudności 1-10 lub 'łatwy'/'średni'/'trudny'
-            subtopic (str): Podtemat (np. "Algebra", "Geometria") - opcjonalnie
-            knowledge_level (str): Poziom wiedzy ('elementary', 'high_school', 'university', 'expert')
+            topic (str): Temat pytania
+            difficulty (float lub str): Poziom trudności 1-10 LUB 'łatwy'/'średni'/'trudny'
+            subtopic (str): Podtemat - opcjonalnie
+            knowledge_level (str): Poziom wiedzy
 
         Returns:
             dict: Słownik z pytaniem, odpowiedziami i wyjaśnieniem
         """
-        # Konwertuj numeryczny poziom na tekstowy jeśli potrzeba
+        # ✅ Konwertuj numeryczny poziom na tekstowy jeśli potrzeba
         if isinstance(difficulty, (int, float)):
-            difficulty_text = self._convert_numeric_to_text_difficulty(difficulty)
+            from llm_integration.difficulty_adapter import DifficultyAdapter
+            adapter = DifficultyAdapter()
+            difficulty_text = adapter.get_difficulty_level(difficulty)
         else:
             difficulty_text = difficulty
 

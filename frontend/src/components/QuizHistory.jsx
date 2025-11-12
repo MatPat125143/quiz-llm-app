@@ -11,6 +11,7 @@ export default function QuizHistory() {
     const [filters, setFilters] = useState({
         topic: '',
         difficulty: '',
+        knowledgeLevel: '',
         sortBy: 'date_desc',
         is_custom: ''
     });
@@ -44,12 +45,17 @@ export default function QuizHistory() {
 
         if (filters.topic) {
             filtered = filtered.filter(q =>
-                q.topic.toLowerCase().includes(filters.topic.toLowerCase())
+                q.topic.toLowerCase().includes(filters.topic.toLowerCase()) ||
+                (q.subtopic && q.subtopic.toLowerCase().includes(filters.topic.toLowerCase()))
             );
         }
 
         if (filters.difficulty) {
             filtered = filtered.filter(q => q.difficulty === filters.difficulty);
+        }
+
+        if (filters.knowledgeLevel) {
+            filtered = filtered.filter(q => q.knowledge_level === filters.knowledgeLevel);
         }
 
         if (filters.is_custom) {
@@ -87,6 +93,7 @@ export default function QuizHistory() {
         setFilters({
             topic: '',
             difficulty: '',
+            knowledgeLevel: '',
             sortBy: 'date_desc',
             is_custom: ''
         });
@@ -95,6 +102,16 @@ export default function QuizHistory() {
     const calculatePercentage = (quiz) => {
         if (!quiz.total_questions || quiz.total_questions === 0) return 0;
         return Math.round((quiz.correct_answers / quiz.total_questions) * 100);
+    };
+
+    const getKnowledgeLevelLabel = (level) => {
+        const labels = {
+            'elementary': '📚 Podstawowa',
+            'high_school': '🎓 Liceum',
+            'university': '🎯 Studia',
+            'expert': '🏆 Ekspert'
+        };
+        return labels[level] || level;
     };
 
     if (loading) {
@@ -123,111 +140,130 @@ export default function QuizHistory() {
     return (
         <Layout user={user}>
             <div className="max-w-7xl mx-auto px-6 py-8">
-{/* 🔍 Filtry i sortowanie - ZMODYFIKOWANY POD WZGLĘDEM WYGLĄDU */}
-<div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100 mb-8">
-  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-    <span className="text-2xl">🔍</span>
-    Filtry i sortowanie
-  </h2>
+                <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100 mb-8">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span className="text-2xl">🔍</span>
+                        Filtry i sortowanie
+                    </h2>
 
-  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-    {/* 🔍 Szukaj w temacie quizu – SZERSZE pole (2 kolumny) */}
-    <div className="md:col-span-2">
-      <label className="block text-sm font-semibold text-gray-700 mb-2">
-        Szukaj w temacie quizu
-      </label>
-      <input
-        type="text"
-        value={filters.topic}
-        onChange={(e) => handleFilterChange('topic', e.target.value)}
-        placeholder="np. Matematyka, Historia..."
-        // Ujednolicony styl input
-        className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
-      />
-    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Szukaj w temacie lub podtemacie quizu
+                            </label>
+                            <input
+                                type="text"
+                                value={filters.topic}
+                                onChange={(e) => handleFilterChange('topic', e.target.value)}
+                                placeholder="np. Matematyka, Algebra, Historia..."
+                                className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
+                            />
+                        </div>
 
-    {/* Rodzaj quizu */}
-    <div>
-      <label className="block text-sm font-semibold text-gray-700 mb-2">
-        Rodzaj quizu
-      </label>
-      <select
-        value={filters.is_custom}
-        onChange={(e) => handleFilterChange('is_custom', e.target.value)}
-        // Ujednolicony styl select
-        className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
-      >
-        <option value="">Wszystkie</option>
-        <option value="false">Adaptacyjne</option>
-        <option value="true">Standardowe</option>
-      </select>
-    </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Rodzaj quizu
+                            </label>
+                            <select
+                                value={filters.is_custom}
+                                onChange={(e) => handleFilterChange('is_custom', e.target.value)}
+                                className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
+                            >
+                                <option value="">Wszystkie</option>
+                                <option value="false">Adaptacyjne</option>
+                                <option value="true">Standardowe</option>
+                            </select>
+                        </div>
 
-    {/* Sortuj według */}
-    <div>
-      <label className="block text-sm font-semibold text-gray-700 mb-2">
-        Sortuj według
-      </label>
-      <select
-        value={filters.sortBy}
-        onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-        // Ujednolicony styl select
-        className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
-      >
-        <option value="date_desc">Najnowsze</option>
-        <option value="date_asc">Najstarsze</option>
-        <option value="score_desc">Najlepszy wynik</option>
-        <option value="score_asc">Najgorszy wynik</option>
-      </select>
-    </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Sortuj według
+                            </label>
+                            <select
+                                value={filters.sortBy}
+                                onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                                className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition"
+                            >
+                                <option value="date_desc">Najnowsze</option>
+                                <option value="date_asc">Najstarsze</option>
+                                <option value="score_desc">Najlepszy wynik</option>
+                                <option value="score_asc">Najgorszy wynik</option>
+                            </select>
+                        </div>
 
-    {/* Poziom trudności + przycisk wyczyszczenia (cała szerokość) */}
-    <div className="md:col-span-4 mt-2">
-      <label className="block text-sm font-semibold text-gray-700 mb-2">
-        Poziom trudności
-      </label>
-      <div className="flex flex-wrap gap-2">
-        {[
-          { value: 'easy', label: '🟢 Łatwy' },
-          { value: 'medium', label: '🟡 Średni' },
-          { value: 'hard', label: '🔴 Trudny' },
-        ].map((opt) => {
-          const active = filters.difficulty === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              // Logika dla pojedynczego zaznaczenia
-              onClick={() =>
-                handleFilterChange('difficulty', active ? '' : opt.value)
-              }
-              // Ujednolicone style przycisków (jak w QuestionsLibrary.jsx)
-              className={`px-3 py-1 rounded-full border-2 text-sm font-semibold transition-all ${
-                active
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-600 shadow'
-                  : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200'
-              }`}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
+                        <div className="md:col-span-4 mt-2">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Poziom trudności
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { value: 'easy', label: '🟢 Łatwy' },
+                                    { value: 'medium', label: '🟡 Średni' },
+                                    { value: 'hard', label: '🔴 Trudny' },
+                                ].map((opt) => {
+                                    const active = filters.difficulty === opt.value;
+                                    return (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() =>
+                                                handleFilterChange('difficulty', active ? '' : opt.value)
+                                            }
+                                            className={`px-3 py-1 rounded-full border-2 text-sm font-semibold transition-all ${
+                                                active
+                                                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-600 shadow'
+                                                    : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
 
-        {/* 🗑️ Ujednolicony przycisk Wyczyść filtry */}
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="ml-auto px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition font-semibold flex items-center gap-2"
-        >
-          🗑️ Wyczyść filtry
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
+                        <div className="md:col-span-4 mt-2">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Poziom wiedzy
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { value: 'elementary', label: '📚 Podstawowa' },
+                                    { value: 'high_school', label: '🎓 Liceum' },
+                                    { value: 'university', label: '🎯 Studia' },
+                                    { value: 'expert', label: '🏆 Ekspert' },
+                                ].map((opt) => {
+                                    const active = filters.knowledgeLevel === opt.value;
+                                    return (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() =>
+                                                handleFilterChange('knowledgeLevel', active ? '' : opt.value)
+                                            }
+                                            className={`px-3 py-1 rounded-full border-2 text-sm font-semibold transition-all ${
+                                                active
+                                                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-600 shadow'
+                                                    : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    );
+                                })}
 
+                                <button
+                                    type="button"
+                                    onClick={clearFilters}
+                                    className="ml-auto px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition font-semibold flex items-center gap-2"
+                                >
+                                    🗑️ Wyczyść filtry
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                {/* 📊 Statystyki */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
                         <div className="flex items-center gap-4">
@@ -272,7 +308,6 @@ export default function QuizHistory() {
                     </div>
                 </div>
 
-                {/* 📋 Lista quizów */}
                 <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
@@ -312,7 +347,15 @@ export default function QuizHistory() {
                                             <div className="flex items-center gap-3 mb-3">
                                                 <h3 className="text-xl font-bold text-gray-800 group-hover:text-indigo-600 transition-colors">
                                                     📚 {quiz.topic}
+                                                    {quiz.subtopic && (
+                                                        <span className="text-base font-normal text-gray-600 ml-2">
+                                                            → {quiz.subtopic}
+                                                        </span>
+                                                    )}
                                                 </h3>
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-2 mb-3">
                                                 <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
                                                     quiz.difficulty === 'easy'
                                                         ? 'bg-green-100 text-green-700'
@@ -324,6 +367,11 @@ export default function QuizHistory() {
                                                     {quiz.difficulty === 'medium' && '🟡 Średni'}
                                                     {quiz.difficulty === 'hard' && '🔴 Trudny'}
                                                 </span>
+                                                {quiz.knowledge_level && (
+                                                    <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold">
+                                                        {getKnowledgeLevelLabel(quiz.knowledge_level)}
+                                                    </span>
+                                                )}
                                                 {quiz.use_adaptive_difficulty && (
                                                     <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
                                                         🎯 Adaptacyjny

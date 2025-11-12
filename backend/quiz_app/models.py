@@ -97,7 +97,7 @@ class Question(models.Model):
     # Statystyki
     total_answers = models.IntegerField(default=0)
     correct_answers_count = models.IntegerField(default=0)
-    times_used = models.IntegerField(default=0)  # NOWE
+    times_used = models.IntegerField(default=0)
 
     # Hash dla deduplikacji
     content_hash = models.CharField(max_length=64, db_index=True, null=True, blank=True)
@@ -121,6 +121,11 @@ class Question(models.Model):
         if self.total_answers == 0:
             return 0
         return round((self.correct_answers_count / self.total_answers) * 100, 1)
+
+    @property
+    def incorrect_answers_count(self):
+        """Oblicz niepoprawne odpowiedzi dynamicznie"""
+        return max(0, self.total_answers - self.correct_answers_count)
 
     def update_stats(self, is_correct):
         self.total_answers += 1

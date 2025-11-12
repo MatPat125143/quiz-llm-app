@@ -4,7 +4,19 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="88f636d6-4406-47a5-82d3-6152c6506ebc" name="Changes" comment="no key" />
+    <list default="true" id="88f636d6-4406-47a5-82d3-6152c6506ebc" name="Changes" comment="no key">
+      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/llm_integration/difficulty_adapter.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/llm_integration/difficulty_adapter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/llm_integration/question_generator.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/llm_integration/question_generator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/quiz_app/migrations/0001_initial.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/quiz_app/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/quiz_app/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/quiz_app/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/quiz_app/views.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/QuizDetails.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/QuizDetails.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/QuizHistory.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/QuizHistory.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/QuizSetup.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/QuizSetup.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/UserDashboard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/UserDashboard.jsx" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -104,7 +116,8 @@
       <workItem from="1762101253906" duration="7140000" />
       <workItem from="1762185132978" duration="2322000" />
       <workItem from="1762794200448" duration="13906000" />
-      <workItem from="1762861241778" duration="16068000" />
+      <workItem from="1762861241778" duration="25336000" />
+      <workItem from="1762938827412" duration="15519000" />
     </task>
     <task id="LOCAL-00001" summary="AI modle on">
       <option name="closed" value="true" />
