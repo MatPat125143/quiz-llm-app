@@ -40,7 +40,7 @@ export default function QuestionsLibrary() {
     try {
       setLoading(true);
       setError('');
-      const params = { page, page_size: pageSize, order_by: orderBy };
+      const params = { page, page_size: pageSize, order_by: orderBy, hide_unanswered: 'true' };
       if (search.trim()) params.search = search.trim();
       if (topic.trim()) params.topic = topic.trim();
       if (difficulty.length) params.difficulty = difficulty.join(',');

@@ -285,7 +285,7 @@ export default function QuizDetails() {
                     return (
                       <div
                         key={key}
-                        className={`p-3 rounded-lg border transition ${
+                        className={`p-3 rounded-xl border-2 transition-all ${
                           isCorrect
                             ? 'bg-green-50 border-green-400'
                             : wrongSelected
@@ -293,14 +293,16 @@ export default function QuizDetails() {
                             : 'bg-gray-50 border-gray-200'
                         }`}
                       >
-                        <strong>{key}.</strong> {text}
-                        {isSelected && (
-                          <span
-                            className={`ml-2 text-sm font-semibold ${
-                              isCorrect ? 'text-green-700' : 'text-red-700'
-                            }`}
-                          >
-                            {isCorrect ? '(Twoja poprawna odpowiedź)' : '(Twoja błędna odpowiedź)'}
+                        <span className="font-bold text-indigo-600 mr-2">{key}.</span>
+                        <span className="text-gray-800 break-words">{text}</span>
+                        {isCorrect && (
+                          <span className="ml-3 px-2 py-0.5 rounded-lg text-xs bg-green-600 text-white font-semibold">
+                            ✅ Poprawna odpowiedź
+                          </span>
+                        )}
+                        {wrongSelected && (
+                          <span className="ml-3 px-2 py-0.5 rounded-lg text-xs bg-red-600 text-white font-semibold">
+                            ❌ Twoja odpowiedź
                           </span>
                         )}
                       </div>

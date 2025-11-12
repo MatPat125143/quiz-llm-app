@@ -155,8 +155,8 @@ export const endQuiz = async (sessionId) => {
     return response.data;
 };
 
-export const getQuizHistory = async () => {
-    const response = await api.get('/quiz/history/');
+export const getQuizHistory = async (params = {}) => {
+    const response = await api.get('/quiz/history/', { params });
     return response.data;
 };
 

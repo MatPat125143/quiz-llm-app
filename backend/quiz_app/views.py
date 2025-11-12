@@ -1088,6 +1088,11 @@ def questions_library(request):
         else:
             qs = qs.filter(Q(explanation__isnull=True) | Q(explanation__exact=''))
 
+    # Filter unanswered questions (questions with no answers)
+    hide_unanswered = (request.GET.get('hide_unanswered') or '').lower()
+    if hide_unanswered == 'true':
+        qs = qs.filter(total_answers__gt=0)
+
     # Sortowanie
     order_by = request.GET.get('order_by', '-created_at')
     mapping = {
