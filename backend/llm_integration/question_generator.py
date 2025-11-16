@@ -1,48 +1,31 @@
-"""
-Generator pytań quizowych używający OpenAI API
-"""
 import os
 import json
 import random
+import logging
+
+logger = logging.getLogger('llm_integration')
 
 
 class QuestionGenerator:
-    """Klasa do generowania pytań quizowych"""
 
     def __init__(self):
-        """Inicjalizacja generatora pytań"""
         self.client = None
         self.api_key = os.getenv("OPENAI_API_KEY", "")
 
-        # Sprawdź czy klucz API jest ustawiony
         if not self.api_key or self.api_key == "sk-your-openai-api-key-here":
-            print("⚠️  OPENAI_API_KEY not set - using fallback questions")
+            logger.warning("OPENAI_API_KEY not set - using fallback questions")
             return
 
-        # Inicjalizuj klienta OpenAI
         try:
             from openai import OpenAI
             self.client = OpenAI(api_key=self.api_key)
-            print("✅ OpenAI client initialized successfully")
+            logger.info("OpenAI client initialized successfully")
         except ImportError:
-            print("⚠️  openai package not installed - using fallback questions")
+            logger.warning("openai package not installed - using fallback questions")
         except Exception as e:
-            print(f"⚠️  Failed to initialize OpenAI: {e}")
-
-    # ❌ USUŃ TĘ FUNKCJĘ - będzie w difficulty_adapter
-    # def _convert_numeric_to_text_difficulty(self, difficulty_float):
-    #     """Konwertuje numeryczny poziom trudności na tekstowy."""
-    #     if difficulty_float <= 3.5:
-    #         return 'łatwy'
-    #     elif difficulty_float <= 7.0:
-    #         return 'średni'
-    #     else:
-    #         return 'trudny'
+            logger.error(f"Failed to initialize OpenAI: {e}")
 
     def _get_knowledge_level_description(self, knowledge_level):
-        """
-        Zwraca opis poziomu wiedzy dla promptu AI.
-        """
         descriptions = {
             'elementary': 'szkoła podstawowa (klasy 1-8)',
             'high_school': 'liceum (szkoła średnia)',
@@ -52,47 +35,26 @@ class QuestionGenerator:
         return descriptions.get(knowledge_level, 'liceum (szkoła średnia)')
 
     def generate_multiple_questions(self, topic, difficulty, count, subtopic=None, knowledge_level='high_school'):
-        """
-        Generuje wiele RÓŻNORODNYCH pytań na raz.
-
-        Args:
-            topic (str): Temat pytań
-            difficulty (float lub str): Poziom trudności 1-10 LUB 'łatwy'/'średni'/'trudny'
-            count (int): Ile pytań wygenerować
-            subtopic (str): Podtemat - opcjonalnie
-            knowledge_level (str): Poziom wiedzy
-
-        Returns:
-            list: Lista słowników z pytaniami
-        """
-        # ✅ Jeśli dostaliśmy float - zostaw jako float (do przekazania do AI)
-        # ✅ Jeśli dostaliśmy string - użyj go bezpośrednio
         if isinstance(difficulty, (int, float)):
-            # Importuj difficulty_adapter jeśli potrzebujemy konwersji dla logów
             from llm_integration.difficulty_adapter import DifficultyAdapter
             adapter = DifficultyAdapter()
             difficulty_text = adapter.get_difficulty_level(difficulty)
         else:
             difficulty_text = difficulty
 
-        # Jeśli brak klienta OpenAI, użyj fake questions
         if self.client is None:
-            print(f"📝 Generating {count} fallback questions for topic: {topic}, difficulty: {difficulty_text}")
+            logger.info(f"Generating {count} fallback questions for topic: {topic}, difficulty: {difficulty_text}")
             return [self._generate_fallback_question(topic, difficulty_text) for _ in range(count)]
 
-        # Generuj pytania używając OpenAI
         try:
-            print(f"🤖 Generating {count} DIVERSE AI questions for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}")
+            logger.info(f"Generating {count} DIVERSE AI questions for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}")
             return self._generate_multiple_ai_questions(topic, difficulty_text, count, subtopic, knowledge_level)
         except Exception as e:
-            print(f"❌ Error generating multiple AI questions: {e}")
-            print(f"📝 Falling back to predefined questions")
+            logger.error(f"Error generating multiple AI questions: {e}")
+            logger.info("Falling back to predefined questions")
             return [self._generate_fallback_question(topic, difficulty_text) for _ in range(count)]
 
     def _generate_multiple_ai_questions(self, topic, difficulty, count, subtopic=None, knowledge_level='high_school'):
-        """Generuje wiele różnorodnych pytań używając OpenAI API"""
-
-        # Mapuj poziom trudności na opis dla AI
         difficulty_descriptions = {
             'łatwy': 'podstawowy, odpowiedni dla początkujących',
             'średni': 'umiarkowany, wymaga pewnej wiedzy',
@@ -100,13 +62,9 @@ class QuestionGenerator:
         }
         difficulty_desc = difficulty_descriptions.get(difficulty, 'umiarkowany')
 
-        # Opis poziomu wiedzy
         knowledge_desc = self._get_knowledge_level_description(knowledge_level)
-
-        # Informacja o podtemacie
         subtopic_info = f"\n- Podtemat: {subtopic}" if subtopic else ""
 
-        # Przygotuj prompt dla AI-WAŻNE: podkreśl różnorodność!
         system_prompt = """Jesteś ekspertem od tworzenia pytań edukacyjnych.
 Tworzysz pytania quizowe w języku polskim.
 ZAWSZE odpowiadasz w formacie JSON bez dodatkowego tekstu.
@@ -138,34 +96,26 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
   ... (pozostałe pytania)
 ]"""
 
-        # Wywołaj OpenAI API z większym max_tokens dla wielu pytań
         response = self.client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.9,  # Wyższa temperatura = więcej różnorodności
-            max_tokens=2000  # Więcej tokenów dla wielu pytań
+            temperature=0.9,
+            max_tokens=2000
         )
 
-        # Pobierz odpowiedź
         content = response.choices[0].message.content.strip()
-
-        # Oczyść odpowiedź z markdown code blocks
         content = self._clean_json_response(content)
-
-        # Parsuj JSON
         questions_data = json.loads(content)
 
-        # Waliduj strukturę
         if not isinstance(questions_data, list):
             raise ValueError(f"Expected list of questions, got: {type(questions_data)}")
 
         if len(questions_data) != count:
-            print(f"⚠️ Requested {count} questions but got {len(questions_data)}")
+            logger.warning(f"Requested {count} questions but got {len(questions_data)}")
 
-        # Waliduj każde pytanie
         for i, q_data in enumerate(questions_data):
             required_keys = ["question", "correct_answer", "wrong_answers", "explanation"]
             if not all(key in q_data for key in required_keys):
@@ -174,23 +124,10 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
             if len(q_data["wrong_answers"]) != 3:
                 raise ValueError(f"Question {i+1} has {len(q_data['wrong_answers'])} wrong answers, expected 3")
 
-        print(f"✅ Generated {len(questions_data)} diverse AI questions successfully")
+        logger.info(f"Generated {len(questions_data)} diverse AI questions successfully")
         return questions_data
 
     def generate_question(self, topic, difficulty, subtopic=None, knowledge_level='high_school'):
-        """
-        Generuje pytanie quizowe
-
-        Args:
-            topic (str): Temat pytania
-            difficulty (float lub str): Poziom trudności 1-10 LUB 'łatwy'/'średni'/'trudny'
-            subtopic (str): Podtemat - opcjonalnie
-            knowledge_level (str): Poziom wiedzy
-
-        Returns:
-            dict: Słownik z pytaniem, odpowiedziami i wyjaśnieniem
-        """
-        # ✅ Konwertuj numeryczny poziom na tekstowy jeśli potrzeba
         if isinstance(difficulty, (int, float)):
             from llm_integration.difficulty_adapter import DifficultyAdapter
             adapter = DifficultyAdapter()
@@ -198,24 +135,19 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
         else:
             difficulty_text = difficulty
 
-        # Jeśli brak klienta OpenAI, użyj fake questions
         if self.client is None:
-            print(f"📝 Generating fallback question for topic: {topic}, difficulty: {difficulty_text}")
+            logger.info(f"Generating fallback question for topic: {topic}, difficulty: {difficulty_text}")
             return self._generate_fallback_question(topic, difficulty_text)
 
-        # Generuj pytanie używając OpenAI
         try:
-            print(f"🤖 Generating AI question for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}")
+            logger.info(f"Generating AI question for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}")
             return self._generate_ai_question(topic, difficulty_text, subtopic, knowledge_level)
         except Exception as e:
-            print(f"❌ Error generating AI question: {e}")
-            print(f"📝 Falling back to predefined questions")
+            logger.error(f"Error generating AI question: {e}")
+            logger.info("Falling back to predefined questions")
             return self._generate_fallback_question(topic, difficulty_text)
 
     def _generate_ai_question(self, topic, difficulty, subtopic=None, knowledge_level='high_school'):
-        """Generuje pytanie używając OpenAI API"""
-
-        # Mapuj poziom trudności na opis dla AI
         difficulty_descriptions = {
             'łatwy': 'podstawowy, odpowiedni dla początkujących',
             'średni': 'umiarkowany, wymaga pewnej wiedzy',
@@ -223,13 +155,9 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
         }
         difficulty_desc = difficulty_descriptions.get(difficulty, 'umiarkowany')
 
-        # Opis poziomu wiedzy
         knowledge_desc = self._get_knowledge_level_description(knowledge_level)
-
-        # Informacja o podtemacie
         subtopic_info = f"\n- Podtemat: {subtopic}" if subtopic else ""
 
-        # Przygotuj prompt dla AI
         system_prompt = """Jesteś ekspertem od tworzenia pytań edukacyjnych.
 Tworzysz pytania quizowe w języku polskim.
 ZAWSZE odpowiadasz w formacie JSON bez dodatkowego tekstu."""
@@ -248,7 +176,6 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON:
     "explanation": "krótkie wyjaśnienie poprawnej odpowiedzi po polsku (dostosowane do poziomu {knowledge_desc})"
 }}"""
 
-        # Wywołaj OpenAI API
         response = self.client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -259,16 +186,10 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON:
             max_tokens=500
         )
 
-        # Pobierz odpowiedź
         content = response.choices[0].message.content.strip()
-
-        # Oczyść odpowiedź z markdown code blocks
         content = self._clean_json_response(content)
-
-        # Parsuj JSON
         question_data = json.loads(content)
 
-        # Waliduj strukturę
         required_keys = ["question", "correct_answer", "wrong_answers", "explanation"]
         if not all(key in question_data for key in required_keys):
             raise ValueError(f"Missing required keys in response. Got: {question_data.keys()}")
@@ -276,27 +197,19 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON:
         if len(question_data["wrong_answers"]) != 3:
             raise ValueError(f"Expected 3 wrong answers, got {len(question_data['wrong_answers'])}")
 
-        print(f"✅ AI question generated successfully")
+        logger.info("AI question generated successfully")
         return question_data
 
     def _clean_json_response(self, content):
-        """Usuwa markdown code blocks z odpowiedzi"""
-        # Usuń ```json na początku
         if content.startswith("```json"):
             content = content[7:]
-        # Usuń ``` na początku
         if content.startswith("```"):
             content = content[3:]
-        # Usuń ``` na końcu
         if content.endswith("```"):
             content = content[:-3]
-
         return content.strip()
 
     def _generate_fallback_question(self, topic, difficulty):
-        """Generuje przykładowe pytanie gdy OpenAI nie jest dostępny"""
-
-        # Różne pytania zależnie od tematu
         questions_by_topic = {
             "Matematyka": [
                 {
@@ -342,7 +255,6 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON:
             ],
         }
 
-        # Domyślne pytania jeśli temat nie pasuje
         default_questions = [
             {
                 'question': 'Ile kontynentów jest na Ziemi?',
@@ -364,14 +276,11 @@ Zwróć odpowiedź w DOKŁADNIE tym formacie JSON:
             },
         ]
 
-        # Wybierz pytania dla danego tematu
         topic_questions = None
         for key in questions_by_topic:
             if key.lower() in topic.lower():
                 topic_questions = questions_by_topic[key]
                 break
 
-        # Użyj pytań tematycznych lub domyślnych
         questions = topic_questions if topic_questions else default_questions
-
         return random.choice(questions)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { getQuizDetails, getCurrentUser } from '../services/api';
 import {
   Chart as ChartJS,
@@ -29,10 +29,14 @@ ChartJS.register(
 export default function QuizDetails() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [quiz, setQuiz] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Sprawdź czy przyszedł z panelu admina
+  const fromAdmin = location.state?.fromAdmin === true;
 
   useEffect(() => {
     loadData();
@@ -214,6 +218,14 @@ export default function QuizDetails() {
                   </span>
                 )}
               </h1>
+              {/* Informacja o użytkowniku - TYLKO gdy admin przyszedł z panelu admina */}
+              {fromAdmin && session.user_info && (
+                <p className="text-gray-600 mt-2 flex items-center gap-2">
+                  <span className="font-semibold">👤 Użytkownik:</span>
+                  <span className="text-indigo-600 font-semibold">{session.user_info.username}</span>
+                  <span className="text-gray-500">({session.user_info.email})</span>
+                </p>
+              )}
               <p className="text-gray-600 mt-2">
                 {new Date(session.ended_at || session.completed_at).toLocaleString('pl-PL', {
                   year: 'numeric',
@@ -369,6 +381,15 @@ export default function QuizDetails() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 mt-10">
+          {/* Przycisk powrotu do panelu admina - TYLKO gdy przyszedł z panelu admina */}
+          {fromAdmin && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition font-semibold"
+            >
+              👑 Panel Admina
+            </button>
+          )}
           <button
             onClick={() => navigate('/dashboard')}
             className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-semibold"

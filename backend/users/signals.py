@@ -1,22 +1,32 @@
-from django.db.models.signals import post_migrate
+from django.db.models.signals import post_migrate, post_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
+from users.models import UserProfile
+import logging
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.create(user=instance)
+
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    if hasattr(instance, 'profile'):
+        instance.profile.save()
 
 
 @receiver(post_migrate)
 def create_default_users(sender, **kwargs):
-    """Automatyczne tworzenie admin i user po migracji"""
-
     if sender.name != 'users':
         return
 
-    print('\n' + '=' * 60)
-    print('🔧 CREATING DEFAULT USERS')
-    print('=' * 60)
+    logger.info('Starting default users setup')
 
-    # Admin user
     if not User.objects.filter(email='admin@quiz.com').exists():
         admin_user = User.objects.create_superuser(
             email='admin@quiz.com',
@@ -31,13 +41,10 @@ def create_default_users(sender, **kwargs):
         admin_user.profile.role = 'admin'
         admin_user.profile.save()
 
-        print('✅ Admin user created!')
-        print(f'   Email: admin@quiz.com')
-        print(f'   Password: admin123\n')
+        logger.info('Admin user created: email=admin@quiz.com')
     else:
-        print('⚠️  Admin user already exists\n')
+        logger.debug('Admin user already exists: email=admin@quiz.com')
 
-    # Regular user
     if not User.objects.filter(email='user@quiz.com').exists():
         regular_user = User.objects.create_user(
             email='user@quiz.com',
@@ -50,12 +57,8 @@ def create_default_users(sender, **kwargs):
         regular_user.profile.role = 'user'
         regular_user.profile.save()
 
-        print('✅ Regular user created!')
-        print(f'   Email: user@quiz.com')
-        print(f'   Password: user123\n')
+        logger.info('Regular user created: email=user@quiz.com')
     else:
-        print('⚠️  Regular user already exists\n')
+        logger.debug('Regular user already exists: email=user@quiz.com')
 
-    print('=' * 60)
-    print('🎉 DEFAULT USERS SETUP COMPLETE!')
-    print('=' * 60 + '\n')
+    logger.info('Default users setup completed')
