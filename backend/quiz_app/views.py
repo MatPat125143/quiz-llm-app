@@ -268,40 +268,60 @@ def _prepare_next_question_async(session_id):
                 _cache_next_question_payload(session, q)
                 return
 
-        # Generuj nowe pytanie przez AI
-        max_attempts, attempts = 7, 0
+        # Generuj nowe pytanie przez AI z lepszą logiką retry
+        max_attempts = 10
+        attempts = 0
+
         while attempts < max_attempts:
-            qdata = generator.generate_question(
-                session.topic,
-                session.current_difficulty,
-                subtopic=session.subtopic,
-                knowledge_level=session.knowledge_level
-            )
-
-            # ✨ Zapisz do cache
-            question_cache.cache_question(
-                topic=session.topic,
-                difficulty=difficulty_text,
-                question_data=qdata,
-                subtopic=session.subtopic,
-                knowledge_level=session.knowledge_level
-            )
-
-            q, created = _find_or_create_global_question(
-                session.topic,
-                qdata,
-                difficulty_text,
-                user=session.user,
-                subtopic=session.subtopic,
-                knowledge_level=session.knowledge_level
-            )
-            if q.question_text not in seen_texts:
-                order = QuizSessionQuestion.objects.filter(session=session).count()
-                _add_question_to_session(session, q, order=order)
-                _cache_next_question_payload(session, q)
-                return
             attempts += 1
-            print(f"🔁 (pre-gen) duplicate by text, retry {attempts}/{max_attempts}")
+
+            try:
+                qdata = generator.generate_question(
+                    session.topic,
+                    session.current_difficulty,
+                    subtopic=session.subtopic,
+                    knowledge_level=session.knowledge_level
+                )
+
+                # Sprawdź czy pytanie nie jest duplikatem (po treści)
+                if qdata['question'] in seen_texts:
+                    print(f"🔁 (pre-gen) duplicate by text, retry {attempts}/{max_attempts}")
+                    continue
+
+                # ✨ Zapisz do cache
+                question_cache.cache_question(
+                    topic=session.topic,
+                    difficulty=difficulty_text,
+                    question_data=qdata,
+                    subtopic=session.subtopic,
+                    knowledge_level=session.knowledge_level
+                )
+
+                q, created = _find_or_create_global_question(
+                    session.topic,
+                    qdata,
+                    difficulty_text,
+                    user=session.user,
+                    subtopic=session.subtopic,
+                    knowledge_level=session.knowledge_level
+                )
+
+                # Dodaj do sesji (zwraca None jeśli zbyt podobne semantycznie)
+                order = QuizSessionQuestion.objects.filter(session=session).count()
+                added = _add_question_to_session(session, q, order=order)
+
+                if added:
+                    _cache_next_question_payload(session, q)
+                    print(f"✅ Successfully pre-generated question on attempt {attempts}")
+                    return
+                else:
+                    print(f"🔁 (pre-gen) semantically similar, retry {attempts}/{max_attempts}")
+
+            except Exception as e:
+                print(f"⚠️  Error generating question on attempt {attempts}: {e}")
+                if attempts >= max_attempts:
+                    break
+                continue
 
         # Fallback
         fallback = Question.objects.filter(
@@ -376,43 +396,72 @@ def start_quiz(request):
     print(f"📚 Generating first batch of {to_generate} questions (adaptive={use_adaptive_difficulty})")
 
     try:
-        # Wygeneruj pierwszą serię pytań
-        all_questions_data = generator.generate_multiple_questions(
-            topic,
-            initial_difficulty,
-            to_generate,
-            subtopic=subtopic if subtopic else None,
-            knowledge_level=knowledge_level
-        )
-
         difficulty_text = _convert_numeric_to_text_difficulty(initial_difficulty)
-
         created_count = 0
         reused_count = 0
+        successfully_added = 0
+        max_attempts = 20  # Maksymalnie 20 prób wygenerowania pytań
+        attempts = 0
 
-        # Dla każdego pytania: znajdź/utwórz globalne i dodaj do sesji
-        for order, question_data in enumerate(all_questions_data):
-            question, was_created = _find_or_create_global_question(
+        # Zbierz już widziane teksty pytań (na początku puste)
+        seen_texts = set()
+
+        # Generuj pytania dopóki nie mamy wymaganej liczby (to_generate)
+        while successfully_added < to_generate and attempts < max_attempts:
+            attempts += 1
+            needed = to_generate - successfully_added
+
+            print(f"🔄 Attempt {attempts}: Generating {needed} more questions (have {successfully_added}/{to_generate})")
+
+            # Wygeneruj potrzebną liczbę pytań
+            all_questions_data = generator.generate_multiple_questions(
                 topic,
-                question_data,
-                difficulty_text,
-                user=request.user,
+                initial_difficulty,
+                needed,
                 subtopic=subtopic if subtopic else None,
                 knowledge_level=knowledge_level
             )
 
-            if was_created:
-                created_count += 1
-            else:
-                reused_count += 1
+            # Dla każdego pytania: znajdź/utwórz globalne i dodaj do sesji
+            for question_data in all_questions_data:
+                # Sprawdź czy nie mamy już tego pytania (po treści)
+                if question_data['question'] in seen_texts:
+                    print(f"⚠️  Duplicate question text detected, skipping")
+                    continue
 
-            # Dodaj pytanie do sesji
-            _add_question_to_session(session, question, order=order)
+                question, was_created = _find_or_create_global_question(
+                    topic,
+                    question_data,
+                    difficulty_text,
+                    user=request.user,
+                    subtopic=subtopic if subtopic else None,
+                    knowledge_level=knowledge_level
+                )
 
-        session.questions_generated_count = to_generate
+                if was_created:
+                    created_count += 1
+                else:
+                    reused_count += 1
+
+                # Dodaj pytanie do sesji (zwraca None jeśli pytanie zbyt podobne)
+                added = _add_question_to_session(session, question, order=successfully_added)
+
+                if added:
+                    seen_texts.add(question_data['question'])
+                    successfully_added += 1
+                    print(f"✅ Added question {successfully_added}/{to_generate}")
+
+                    # Jeśli mamy już wystarczająco pytań, zakończ
+                    if successfully_added >= to_generate:
+                        break
+
+        session.questions_generated_count = successfully_added
         session.save(update_fields=['questions_generated_count'])
 
-        print(f"✅ Pre-generated first batch: {created_count} new, {reused_count} reused")
+        if successfully_added < to_generate:
+            print(f"⚠️  WARNING: Only generated {successfully_added}/{to_generate} questions after {attempts} attempts")
+        else:
+            print(f"✅ Pre-generated first batch: {successfully_added} questions ({created_count} new, {reused_count} reused)")
 
     except Exception as e:
         print(f"❌ Error pre-generating questions: {e}")
@@ -696,15 +745,6 @@ def submit_answer(request):
                                 unused_questions.delete()
                                 print(f"🗑️ Deleted {deleted_count} unused questions from previous difficulty level")
 
-                                # Wygeneruj nową serię na nowym poziomie trudności
-                                all_questions_data = generator.generate_multiple_questions(
-                                    session_refresh.topic,
-                                    session_refresh.current_difficulty,
-                                    to_generate,
-                                    subtopic=session_refresh.subtopic,
-                                    knowledge_level=session_refresh.knowledge_level
-                                )
-
                                 difficulty_text = _convert_numeric_to_text_difficulty(
                                     session_refresh.current_difficulty)
 
@@ -714,26 +754,63 @@ def submit_answer(request):
                                     .values_list('question__question_text', flat=True)
                                 )
 
-                                for i, question_data in enumerate(all_questions_data):
-                                    q, created = _find_or_create_global_question(
+                                successfully_added = 0
+                                max_attempts = 15  # Maksymalnie 15 prób
+                                attempts = 0
+
+                                # Generuj pytania dopóki nie mamy wymaganej liczby
+                                while successfully_added < to_generate and attempts < max_attempts:
+                                    attempts += 1
+                                    needed = to_generate - successfully_added
+
+                                    print(f"🔄 Difficulty change batch - Attempt {attempts}: Generating {needed} more questions (have {successfully_added}/{to_generate})")
+
+                                    # Wygeneruj nową serię na nowym poziomie trudności
+                                    all_questions_data = generator.generate_multiple_questions(
                                         session_refresh.topic,
-                                        question_data,
-                                        difficulty_text,
-                                        user=session_refresh.user,
+                                        session_refresh.current_difficulty,
+                                        needed,
                                         subtopic=session_refresh.subtopic,
                                         knowledge_level=session_refresh.knowledge_level
                                     )
 
-                                    # Sprawdź czy pytanie nie było już pokazane (po treści)
-                                    if q.question_text not in seen_texts:
-                                        order = QuizSessionQuestion.objects.filter(session=session_refresh).count()
-                                        _add_question_to_session(session_refresh, q, order=order)
-                                        seen_texts.add(q.question_text)
+                                    for question_data in all_questions_data:
+                                        # Sprawdź czy nie mamy już tego pytania (po treści)
+                                        if question_data['question'] in seen_texts:
+                                            print(f"⚠️  Duplicate question text detected, skipping")
+                                            continue
+
+                                        q, created = _find_or_create_global_question(
+                                            session_refresh.topic,
+                                            question_data,
+                                            difficulty_text,
+                                            user=session_refresh.user,
+                                            subtopic=session_refresh.subtopic,
+                                            knowledge_level=session_refresh.knowledge_level
+                                        )
+
+                                        # Sprawdź czy pytanie nie było już pokazane (po treści)
+                                        if q.question_text not in seen_texts:
+                                            order = QuizSessionQuestion.objects.filter(session=session_refresh).count()
+                                            added = _add_question_to_session(session_refresh, q, order=order)
+
+                                            if added:
+                                                seen_texts.add(q.question_text)
+                                                successfully_added += 1
+                                                print(f"✅ Added question {successfully_added}/{to_generate} for new difficulty level")
+
+                                                # Jeśli mamy już wystarczająco pytań, zakończ
+                                                if successfully_added >= to_generate:
+                                                    break
 
                                 # Ustaw licznik na liczbę pytań które gracz już odpowiedział + nowa seria
-                                session_refresh.questions_generated_count = answered_count + to_generate
+                                session_refresh.questions_generated_count = answered_count + successfully_added
                                 session_refresh.save(update_fields=['questions_generated_count'])
-                                print(f"✅ Generated NEW batch of {to_generate} questions for new difficulty level")
+
+                                if successfully_added < to_generate:
+                                    print(f"⚠️  WARNING: Only generated {successfully_added}/{to_generate} questions after difficulty change")
+                                else:
+                                    print(f"✅ Generated NEW batch of {successfully_added} questions for new difficulty level")
 
                             except Exception as e:
                                 print(f"❌ Error generating new batch after difficulty change: {e}")
@@ -769,31 +846,68 @@ def submit_answer(request):
                     def generate_next_batch():
                         try:
                             session_refresh = QuizSession.objects.get(id=session.id)
-                            all_questions_data = generator.generate_multiple_questions(
-                                session_refresh.topic,
-                                session_refresh.current_difficulty,
-                                to_generate,
-                                subtopic=session_refresh.subtopic,
-                                knowledge_level=session_refresh.knowledge_level
-                            )
-
                             difficulty_text = _convert_numeric_to_text_difficulty(session_refresh.current_difficulty)
 
-                            for i, question_data in enumerate(all_questions_data):
-                                q, created = _find_or_create_global_question(
+                            # Pobierz już widziane teksty pytań (żeby nie duplikować)
+                            seen_texts = set(
+                                Answer.objects.filter(session=session_refresh)
+                                .values_list('question__question_text', flat=True)
+                            )
+
+                            successfully_added = 0
+                            max_attempts = 15  # Maksymalnie 15 prób
+                            attempts = 0
+
+                            # Generuj pytania dopóki nie mamy wymaganej liczby
+                            while successfully_added < to_generate and attempts < max_attempts:
+                                attempts += 1
+                                needed = to_generate - successfully_added
+
+                                print(f"🔄 Fixed mode batch - Attempt {attempts}: Generating {needed} more questions (have {successfully_added}/{to_generate})")
+
+                                all_questions_data = generator.generate_multiple_questions(
                                     session_refresh.topic,
-                                    question_data,
-                                    difficulty_text,
-                                    user=session_refresh.user,
+                                    session_refresh.current_difficulty,
+                                    needed,
                                     subtopic=session_refresh.subtopic,
                                     knowledge_level=session_refresh.knowledge_level
                                 )
-                                order = session_refresh.questions_generated_count + i
-                                _add_question_to_session(session_refresh, q, order=order)
 
-                            session_refresh.questions_generated_count += to_generate
+                                for question_data in all_questions_data:
+                                    # Sprawdź czy nie mamy już tego pytania (po treści)
+                                    if question_data['question'] in seen_texts:
+                                        print(f"⚠️  Duplicate question text detected, skipping")
+                                        continue
+
+                                    q, created = _find_or_create_global_question(
+                                        session_refresh.topic,
+                                        question_data,
+                                        difficulty_text,
+                                        user=session_refresh.user,
+                                        subtopic=session_refresh.subtopic,
+                                        knowledge_level=session_refresh.knowledge_level
+                                    )
+
+                                    if q.question_text not in seen_texts:
+                                        order = session_refresh.questions_generated_count + successfully_added
+                                        added = _add_question_to_session(session_refresh, q, order=order)
+
+                                        if added:
+                                            seen_texts.add(q.question_text)
+                                            successfully_added += 1
+                                            print(f"✅ Added question {successfully_added}/{to_generate} in fixed mode batch")
+
+                                            # Jeśli mamy już wystarczająco pytań, zakończ
+                                            if successfully_added >= to_generate:
+                                                break
+
+                            session_refresh.questions_generated_count += successfully_added
                             session_refresh.save(update_fields=['questions_generated_count'])
-                            print(f"✅ Generated next batch of {to_generate} questions")
+
+                            if successfully_added < to_generate:
+                                print(f"⚠️  WARNING: Only generated {successfully_added}/{to_generate} questions in fixed mode batch")
+                            else:
+                                print(f"✅ Generated next batch of {successfully_added} questions in fixed mode")
 
                         except Exception as e:
                             print(f"❌ Error generating next batch: {e}")

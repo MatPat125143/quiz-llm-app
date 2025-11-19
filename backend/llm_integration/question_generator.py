@@ -132,18 +132,25 @@ WAŻNE: Pytania muszą być RÓŻNORODNE i dotyczyć RÓŻNYCH aspektów tematu!
 - WAŻNE: Zmień kontekst, liczby, przykłady w każdym pytaniu!
 - WAŻNE: Dostosuj język i złożoność do poziomu: {knowledge_desc}
 
+✅ ZASADY DLA ODPOWIEDZI:
+- Odpowiedzi muszą być KRÓTKIE i KONKRETNE (tylko wynik/wartość/nazwa)
+- NIE powtarzaj treści pytania w odpowiedzi
+- Przykład DOBRZE: Pytanie "Ile wynosi 2+2?" → Odpowiedź "4"
+- Przykład ŹLE: Pytanie "Ile wynosi 2+2?" → Odpowiedź "2+2=4" lub "Suma wynosi 4"
+- Odpowiedź to TYLKO wynik, bez dodatkowego tekstu!
+
 Zwróć odpowiedź w DOKŁADNIE tym formacie JSON (tablica {count} pytań):
 [
   {{
     "question": "treść pytania 1 po polsku (dostosowana do poziomu {knowledge_desc})",
-    "correct_answer": "poprawna odpowiedź 1",
-    "wrong_answers": ["błędna 1.1", "błędna 1.2", "błędna 1.3"],
+    "correct_answer": "poprawna odpowiedź 1 (KRÓTKA, tylko wynik!)",
+    "wrong_answers": ["błędna 1.1 (krótka)", "błędna 1.2 (krótka)", "błędna 1.3 (krótka)"],
     "explanation": "krótkie wyjaśnienie 1 po polsku (dostosowane do poziomu {knowledge_desc})"
   }},
   {{
     "question": "treść pytania 2 po polsku (INNY aspekt tematu!)",
-    "correct_answer": "poprawna odpowiedź 2",
-    "wrong_answers": ["błędna 2.1", "błędna 2.2", "błędna 2.3"],
+    "correct_answer": "poprawna odpowiedź 2 (KRÓTKA, tylko wynik!)",
+    "wrong_answers": ["błędna 2.1 (krótka)", "błędna 2.2 (krótka)", "błędna 2.3 (krótka)"],
     "explanation": "krótkie wyjaśnienie 2 po polsku"
   }}
   ... (pozostałe pytania)
@@ -249,11 +256,18 @@ ZAWSZE odpowiadasz w formacie JSON bez dodatkowego tekstu."""
 - Poziom trudności pytania: {difficulty} ({difficulty_desc})
 - WAŻNE: Dostosuj język i złożoność do poziomu: {knowledge_desc}
 
+✅ ZASADY DLA ODPOWIEDZI:
+- Odpowiedzi muszą być KRÓTKIE i KONKRETNE (tylko wynik/wartość/nazwa)
+- NIE powtarzaj treści pytania w odpowiedzi
+- Przykład DOBRZE: Pytanie "Ile wynosi 2+2?" → Odpowiedź "4"
+- Przykład ŹLE: Pytanie "Ile wynosi 2+2?" → Odpowiedź "2+2=4" lub "Suma wynosi 4"
+- Odpowiedź to TYLKO wynik, bez dodatkowego tekstu!
+
 Zwróć odpowiedź w DOKŁADNIE tym formacie JSON:
 {{
     "question": "treść pytania po polsku (dostosowana do poziomu {knowledge_desc})",
-    "correct_answer": "poprawna odpowiedź",
-    "wrong_answers": ["błędna odpowiedź 1", "błędna odpowiedź 2", "błędna odpowiedź 3"],
+    "correct_answer": "poprawna odpowiedź (KRÓTKA, tylko wynik!)",
+    "wrong_answers": ["błędna 1 (krótka)", "błędna 2 (krótka)", "błędna 3 (krótka)"],
     "explanation": "krótkie wyjaśnienie poprawnej odpowiedzi po polsku (dostosowane do poziomu {knowledge_desc})"
 }}"""
 
