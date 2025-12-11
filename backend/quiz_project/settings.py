@@ -198,19 +198,20 @@ CACHES = {
 }
 
 # Email Configuration
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Do testów - email w konsoli
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # Do produkcji
+# Używaj SMTP dla prawdziwego wysyłania emaili (WP.PL, Gmail, itp.)
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
 
-# Gmail SMTP (odkomentuj gdy będziesz gotowy)
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'your-email@gmail.com')
-# EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', 'your-app-password')
-# DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Quiz App <noreply@quizapp.com>')
+# Konfiguracja SMTP
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.wp.pl')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 465))
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'True') == 'True'
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False') == 'True'
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'quiz-llm-app@wp.pl')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'quiz-llm-app@wp.pl')
 
-# Na razie: Console backend - email wyświetla się w logach Docker
-DEFAULT_FROM_EMAIL = 'Quiz App <noreply@quizapp.com>'
+# Timeout dla SMTP (30 sekund)
+EMAIL_TIMEOUT = 30
 
 # Token expiry times
 PASSWORD_RESET_TIMEOUT = 3600  # 1 godzina

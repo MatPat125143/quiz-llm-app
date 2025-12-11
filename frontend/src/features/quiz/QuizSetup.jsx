@@ -30,6 +30,11 @@ export default function QuizSetup() {
       try {
         const userData = await getCurrentUser();
         setUser(userData);
+
+        // Ustaw domyślny poziom wiedzy z profilu użytkownika
+        if (userData.profile?.default_knowledge_level) {
+          setKnowledgeLevel(userData.profile.default_knowledge_level);
+        }
       } catch (err) {
         console.error('Error loading user:', err);
       }
@@ -96,178 +101,187 @@ export default function QuizSetup() {
 
   return (
     <MainLayout user={user}>
-      <div className="max-w-5xl mx-auto px-6 py-10">
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+          <h1 className="text-2xl font-bold text-gray-800 mb-2 flex items-center gap-2">
             🎯 Rozpocznij nowy quiz
           </h1>
-          <p className="text-gray-600 mb-6">
+          <p className="text-gray-600 text-sm mb-4">
             Wybierz temat, poziom trudności i rozpocznij quiz dopasowany do Twojego stylu nauki.
           </p>
 
+          <div className="bg-blue-50 border-l-4 border-blue-500 px-4 py-3 rounded-r-lg mb-4">
+            <p className="text-sm text-blue-800">
+              <strong>ℹ️ Informacja:</strong> Pytania generowane są przez sztuczną inteligencję. AI nie jest doskonałe i może sporadycznie tworzyć pytania zawierające błędy lub nieścisłości. Prosimy o wyrozumiałość i zgłaszanie ewentualnych problemów.
+            </p>
+          </div>
+
           {error && (
-            <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded-xl mb-6">
+            <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded-xl mb-4">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-8">
-            {/* Temat quizu */}
-            <div>
-              <label className="block text-lg font-bold text-gray-800 mb-3">
-                Temat quizu
-              </label>
-              <input
-                type="text"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="Wprowadź własny temat lub wybierz poniżej"
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-all"
-                disabled={loading}
-              />
-              <div className="mt-4">
-                <p className="text-sm text-gray-600 mb-3 font-semibold">
-                  Lub wybierz popularny temat:
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {PREDEFINED_TOPICS.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setTopic(t)}
-                      className={`px-4 py-2 rounded-xl border-2 font-semibold text-sm transition-all ${
-                        topic === t
-                          ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-transparent shadow-md'
-                          : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400'
-                      }`}
-                      disabled={loading}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Podtemat */}
-            {topic && TOPIC_SUBTOPICS[topic] && (
-              <div>
-                <label className="block text-lg font-bold text-gray-800 mb-3">
-                  Podtemat (opcjonalnie)
-                </label>
-                <input
-                  type="text"
-                  value={subtopic}
-                  onChange={(e) => setSubtopic(e.target.value)}
-                  placeholder="Wprowadź własny podtemat lub wybierz poniżej"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-all mb-3"
-                  disabled={loading}
-                />
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {TOPIC_SUBTOPICS[topic].map((sub) => (
-                    <button
-                      key={sub}
-                      type="button"
-                      onClick={() => setSubtopic(sub)}
-                      className={`px-3 py-2 rounded-lg border-2 text-sm font-semibold transition-all ${
-                        subtopic === sub
-                          ? 'bg-indigo-100 border-indigo-500 text-indigo-700'
-                          : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-300'
-                      }`}
-                      disabled={loading}
-                    >
-                      {sub}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSubtopic('')}
-                  className="mt-2 text-sm text-gray-500 hover:text-gray-700 underline"
-                  disabled={loading}
-                >
-                  Wyczyść podtemat
-                </button>
-              </div>
-            )}
-
-            {/* Poziom wiedzy */}
-            <div>
-              <label className="block text-lg font-bold text-gray-800 mb-3">
-                Poziom wiedzy
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {KNOWLEDGE_LEVELS.map((level) => (
-                  <button
-                    key={level.key}
-                    type="button"
-                    onClick={() => setKnowledgeLevel(level.key)}
-                    className={`py-3 rounded-xl border-2 font-semibold transition-all ${
-                      knowledgeLevel === level.key
-                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-transparent shadow-md'
-                        : 'bg-gray-50 text-gray-800 border-gray-200 hover:border-indigo-400'
-                    }`}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-base font-bold text-gray-800 mb-2">
+                    Temat quizu
+                  </label>
+                  <input
+                    type="text"
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    placeholder="Wprowadź własny temat lub wybierz poniżej"
+                    className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500 text-sm"
                     disabled={loading}
-                  >
-                    <div className="text-2xl mb-1">{level.emoji}</div>
-                    <div className="text-xs">{level.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Poziom trudności */}
-            <div>
-              <label className="block text-lg font-bold text-gray-800 mb-3">
-                Poziom trudności
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {[
-                  { key: 'easy', emoji: '🟢', label: 'Łatwy' },
-                  { key: 'medium', emoji: '🟡', label: 'Średni' },
-                  { key: 'hard', emoji: '🔴', label: 'Trudny' },
-                ].map((lvl) => (
-                  <button
-                    key={lvl.key}
-                    type="button"
-                    onClick={() => setDifficulty(lvl.key)}
-                    className={`py-4 rounded-xl border-2 font-bold transition-all ${
-                      difficulty === lvl.key
-                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-transparent shadow-md scale-105'
-                        : 'bg-gray-50 text-gray-800 border-gray-200 hover:border-indigo-400'
-                    }`}
-                    disabled={loading}
-                  >
-                    <div className="text-3xl mb-1">{lvl.emoji}</div>
-                    {lvl.label}
-                  </button>
-                ))}
-              </div>
-              {useAdaptiveDifficulty && (
-                <div className="mt-4 bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-r-xl">
-                  <p className="text-sm text-indigo-800">
-                    ℹ️ <strong>Tryb adaptacyjny:</strong> Quiz automatycznie dopasuje trudność do Twoich odpowiedzi.
-                  </p>
+                  />
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-600 mb-2 font-semibold">
+                      Lub wybierz popularny temat:
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {PREDEFINED_TOPICS.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setTopic(t)}
+                          className={`px-3 py-1.5 rounded-lg border-2 font-semibold text-xs transition-all ${
+                            topic === t
+                              ? 'bg-indigo-600 text-white border-transparent'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400'
+                          }`}
+                          disabled={loading}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              )}
+
+                {topic && TOPIC_SUBTOPICS[topic] && (
+                  <div>
+                    <label className="block text-base font-bold text-gray-800 mb-2">
+                      Podtemat (opcjonalnie)
+                    </label>
+                    <input
+                      type="text"
+                      value={subtopic}
+                      onChange={(e) => setSubtopic(e.target.value)}
+                      placeholder="Wprowadź własny podtemat"
+                      className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500 text-sm mb-2"
+                      disabled={loading}
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      {TOPIC_SUBTOPICS[topic].slice(0, 6).map((sub) => (
+                        <button
+                          key={sub}
+                          type="button"
+                          onClick={() => setSubtopic(sub)}
+                          className={`px-2 py-1.5 rounded-lg border-2 text-xs font-semibold transition-all ${
+                            subtopic === sub
+                              ? 'bg-indigo-100 border-indigo-500 text-indigo-700'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-300'
+                          }`}
+                          disabled={loading}
+                        >
+                          {sub}
+                        </button>
+                      ))}
+                    </div>
+                    {subtopic && (
+                      <button
+                        type="button"
+                        onClick={() => setSubtopic('')}
+                        className="mt-1 text-xs text-gray-500 hover:text-gray-700 underline"
+                        disabled={loading}
+                      >
+                        Wyczyść
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-5">
+
+                <div>
+                  <label className="block text-base font-bold text-gray-800 mb-2">
+                    Poziom wiedzy
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {KNOWLEDGE_LEVELS.map((level) => (
+                      <button
+                        key={level.key}
+                        type="button"
+                        onClick={() => setKnowledgeLevel(level.key)}
+                        className={`py-2 rounded-lg border-2 font-semibold transition-all text-xs ${
+                          knowledgeLevel === level.key
+                            ? 'bg-indigo-600 text-white border-transparent'
+                            : 'bg-gray-50 text-gray-800 border-gray-200 hover:border-indigo-400'
+                        }`}
+                        disabled={loading}
+                      >
+                        <div className="text-lg mb-0.5">{level.emoji}</div>
+                        <div>{level.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-base font-bold text-gray-800 mb-2">
+                    Poziom trudności
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { key: 'easy', emoji: '🟢', label: 'Łatwy' },
+                      { key: 'medium', emoji: '🟡', label: 'Średni' },
+                      { key: 'hard', emoji: '🔴', label: 'Trudny' },
+                    ].map((lvl) => (
+                      <button
+                        key={lvl.key}
+                        type="button"
+                        onClick={() => setDifficulty(lvl.key)}
+                        className={`py-2 rounded-lg border-2 font-bold transition-all text-xs ${
+                          difficulty === lvl.key
+                            ? 'bg-indigo-600 text-white border-transparent'
+                            : 'bg-gray-50 text-gray-800 border-gray-200 hover:border-indigo-400'
+                        }`}
+                        disabled={loading}
+                      >
+                        <div className="text-xl mb-0.5">{lvl.emoji}</div>
+                        {lvl.label}
+                      </button>
+                    ))}
+                  </div>
+                  {useAdaptiveDifficulty && (
+                    <div className="mt-2 bg-indigo-50 border-l-4 border-indigo-500 p-2 rounded-r-lg">
+                      <p className="text-xs text-indigo-800">
+                        <strong>Tryb adaptacyjny:</strong> Trudność dostosuje się do odpowiedzi.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Zaawansowane ustawienia */}
-            <div className="border-t pt-6">
+            <div className="border-t pt-4">
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="w-full flex items-center justify-between text-gray-800 font-bold text-lg mb-4 hover:text-indigo-600 transition-all"
+                className="w-full flex items-center justify-between text-gray-800 font-bold text-sm mb-3 hover:text-indigo-600 transition-all"
               >
                 <span>⚙️ Ustawienia zaawansowane</span>
-                <span className="text-2xl">{showAdvanced ? '▼' : '▶'}</span>
+                <span className="text-lg">{showAdvanced ? '▼' : '▶'}</span>
               </button>
 
               {showAdvanced && (
-                <div className="space-y-6 bg-gray-50 rounded-xl p-6 border border-gray-100">
-                  {/* Liczba pytań */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 bg-gray-50 rounded-lg p-4 border border-gray-100">
                   <div>
-                    <label className="block text-gray-700 font-semibold mb-2">
+                    <label className="block text-gray-700 font-semibold mb-1 text-sm">
                       Liczba pytań: <span className="text-indigo-600">{questionsCount}</span>
                     </label>
                     <input
@@ -277,18 +291,17 @@ export default function QuizSetup() {
                       step="1"
                       value={questionsCount}
                       onChange={(e) => setQuestionsCount(Number(e.target.value))}
-                      className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                      className="w-full h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                       disabled={loading}
                     />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <div className="flex justify-between text-xs text-gray-500 mt-0.5">
                       <span>5</span>
                       <span>20</span>
                     </div>
                   </div>
 
-                  {/* Czas na pytanie */}
                   <div>
-                    <label className="block text-gray-700 font-semibold mb-2">
+                    <label className="block text-gray-700 font-semibold mb-1 text-sm">
                       Czas na pytanie: <span className="text-indigo-600">{timePerQuestion}s</span>
                     </label>
                     <input
@@ -298,38 +311,35 @@ export default function QuizSetup() {
                       step="5"
                       value={timePerQuestion}
                       onChange={(e) => setTimePerQuestion(Number(e.target.value))}
-                      className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                      className="w-full h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                       disabled={loading}
                     />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <div className="flex justify-between text-xs text-gray-500 mt-0.5">
                       <span>10s</span>
                       <span>60s</span>
                     </div>
                   </div>
 
-                  {/* Tryb adaptacyjny */}
-                  <div className="flex items-center justify-between bg-white rounded-xl p-4 border-2 border-gray-200">
+                  <div className="flex items-center justify-between bg-white rounded-lg p-3 border-2 border-gray-200">
                     <div>
-                      <label className="text-gray-700 font-semibold cursor-pointer">
+                      <label className="text-gray-700 font-semibold cursor-pointer text-sm">
                         Tryb adaptacyjny
                       </label>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {useAdaptiveDifficulty
-                          ? 'Poziom trudności będzie się zmieniał dynamicznie.'
-                          : 'Quiz zachowa wybrany poziom przez cały czas.'}
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {useAdaptiveDifficulty ? 'Włączony' : 'Wyłączony'}
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setUseAdaptiveDifficulty(!useAdaptiveDifficulty)}
-                      className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         useAdaptiveDifficulty ? 'bg-indigo-600' : 'bg-gray-300'
                       }`}
                       disabled={loading}
                     >
                       <span
-                        className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                          useAdaptiveDifficulty ? 'translate-x-7' : 'translate-x-1'
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          useAdaptiveDifficulty ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />
                     </button>
@@ -338,12 +348,11 @@ export default function QuizSetup() {
               )}
             </div>
 
-            {/* Przyciski */}
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => navigate('/dashboard')}
-                className="flex-1 py-4 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition"
+                className="flex-1 py-3 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition text-sm"
                 disabled={loading}
               >
                 Anuluj
@@ -351,9 +360,9 @@ export default function QuizSetup() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold hover:from-indigo-700 hover:to-purple-700 shadow-md transition-all disabled:opacity-50"
+                className="flex-1 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold hover:from-indigo-700 hover:to-purple-700 shadow-md transition-all disabled:opacity-50 text-sm"
               >
-                {loading ? 'Uruchamianie quizu...' : 'Rozpocznij quiz 🚀'}
+                {loading ? 'Uruchamianie...' : 'Rozpocznij quiz 🚀'}
               </button>
             </div>
           </form>

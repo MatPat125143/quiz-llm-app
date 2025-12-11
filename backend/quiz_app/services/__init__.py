@@ -1,5 +1,4 @@
-from .quiz_service import QuizService
 from .question_service import QuestionService
-from .answer_service import AnswerService
+from .background_generator import BackgroundQuestionGenerator
 
-__all__ = ['QuizService', 'QuestionService', 'AnswerService']
+__all__ = ['QuestionService', 'BackgroundQuestionGenerator']

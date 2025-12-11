@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../services/api';
 
@@ -18,6 +18,7 @@ export default function MainLayout({ children, user }) {
         { icon: '🚀', label: 'Rozpocznij Quiz', path: '/quiz/setup' },
         { icon: '📚', label: 'Biblioteka Pytań', path: '/quiz/questions' },
         { icon: '📖', label: 'Historia Quizów', path: '/quiz/history' },
+        { icon: '🏆', label: 'Ranking', path: '/leaderboard' },
         { icon: '👤', label: 'Profil', path: '/profile' },
     ];
 
@@ -89,6 +90,12 @@ export default function MainLayout({ children, user }) {
                             >
                                 📖 Historia
                             </button>
+                            <button
+                                onClick={() => navigate('/leaderboard')}
+                                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors font-medium"
+                            >
+                                🏆 Ranking
+                            </button>
                             {isAdmin && (
                                 <button
                                     onClick={() => navigate('/admin')}
@@ -136,16 +143,12 @@ export default function MainLayout({ children, user }) {
 
             {/* Mobile Sidebar */}
             <div
-                className={`fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden transition-opacity ${
-                    sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                }`}
+                className={`fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden transition-opacity ${sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                 onClick={() => setSidebarOpen(false)}
             />
 
             <aside
-                className={`fixed top-0 left-0 h-full w-80 bg-white shadow-2xl z-50 transform transition-transform lg:hidden ${
-                    sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}
+                className={`fixed top-0 left-0 h-full w-80 bg-white shadow-2xl z-50 transform transition-transform lg:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
             >
                 <div className="p-6">
                     {/* Sidebar Header */}
@@ -297,6 +300,14 @@ export default function MainLayout({ children, user }) {
                                         className="text-gray-600 hover:text-indigo-600 transition-colors text-sm"
                                     >
                                         Historia Quizów
+                                    </button>
+                                </li>
+                                <li>
+                                    <button
+                                        onClick={() => navigate('/leaderboard')}
+                                        className="text-gray-600 hover:text-indigo-600 transition-colors text-sm"
+                                    >
+                                        Ranking
                                     </button>
                                 </li>
                             </ul>

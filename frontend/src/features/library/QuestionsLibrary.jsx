@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getCurrentUser, getQuestionsLibrary } from '../../services/api';
 import MainLayout from '../../layouts/MainLayout';
+import LatexRenderer from '../../components/LatexRenderer';
 
 const DIFFS = [
   { value: 'łatwy', label: '🟢 Łatwy' },
@@ -232,9 +233,14 @@ export default function QuestionsLibrary() {
                 >
                   <div className="flex justify-between items-start gap-6">
                     <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-800 mb-3 group-hover:text-indigo-600 transition-colors">
-                        💡 {q.question_text}
-                      </h3>
+                      <div className="mb-3">
+                        <span className="text-lg">💡 </span>
+                        <LatexRenderer
+                          text={q.question_text}
+                          className="text-lg font-bold text-gray-800 group-hover:text-indigo-600 transition-colors inline"
+                          inline={true}
+                        />
+                      </div>
 
                       {/* metadane */}
                       <div className="flex flex-wrap gap-3 mb-4">
@@ -271,7 +277,7 @@ export default function QuestionsLibrary() {
                             }`}
                           >
                             <span className="font-bold text-indigo-600 mr-2">{a.key}.</span>
-                            <span className="text-gray-800 break-words">{a.text}</span>
+                            <LatexRenderer text={a.text} className="text-gray-800 break-words" inline={true} />
                             {a.correct && (
                               <span className="ml-3 px-2 py-0.5 rounded-lg text-xs bg-green-600 text-white font-semibold">
                                 ✅ Poprawna
@@ -284,7 +290,8 @@ export default function QuestionsLibrary() {
                       {q.explanation && (
                         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-xl">
                           <p className="text-sm text-blue-900">
-                            <span className="font-semibold">💡 Wyjaśnienie:</span> {q.explanation}
+                            <span className="font-semibold">💡 Wyjaśnienie:</span>{' '}
+                            <LatexRenderer text={q.explanation} inline={true} />
                           </p>
                         </div>
                       )}

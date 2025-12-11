@@ -5,11 +5,11 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ..models import QuizSession, Answer, QuizSessionQuestion, Question
-from ..services.quiz_service import QuizService
-from ..services.question_service import QuestionService
+from ..services.background_generator import BackgroundQuestionGenerator
+from llm_integration.difficulty_adapter import DifficultyAdapter
+import logging
 
-quiz_service = QuizService()
-question_service = QuestionService()
+logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
@@ -26,13 +26,17 @@ def start_quiz(request):
     questions_count = min(max(int(questions_count), 5), 20)
     time_per_question = min(max(int(time_per_question), 10), 60)
 
-    difficulty_map = {
-        'easy': 2.0,
-        'medium': 5.0,
-        'hard': 8.0
+    difficulty_map_text = {
+        'easy': 'łatwy',
+        'medium': 'średni',
+        'hard': 'trudny'
     }
+    difficulty_text = difficulty_map_text.get(difficulty, 'średni')
 
-    initial_difficulty = difficulty_map.get(difficulty, 5.0)
+    difficulty_adapter = DifficultyAdapter()
+    initial_difficulty = difficulty_adapter.get_initial_difficulty(difficulty_text)
+
+    logger.info(f"Starting quiz: topic={topic}, difficulty={difficulty_text} ({initial_difficulty})")
 
     session = QuizSession.objects.create(
         user=request.user,
@@ -47,24 +51,33 @@ def start_quiz(request):
         questions_generated_count=0
     )
 
-    batch_size = 4
-    to_generate = min(batch_size, questions_count)
-    print(f"📚 Generating first batch of {to_generate} questions")
+    logger.info(f"Quiz session {session.id} created for user {request.user.id}")
+
+    bg_generator = BackgroundQuestionGenerator()
+
+    sync_count = min(3, questions_count)
+    logger.debug(f"Generating {sync_count} questions synchronously, {questions_count} total")
 
     try:
-        quiz_service.generate_initial_batch(
-            session=session,
-            to_generate=to_generate,
-            initial_difficulty=initial_difficulty,
-            user=request.user
-        )
+        initial_questions = bg_generator.generate_initial_questions_sync(session, count=sync_count)
+        logger.info(f"Generated {len(initial_questions)} initial questions for session {session.id}")
 
-        print(f"✅ First batch generated")
+        if questions_count > sync_count:
+            remaining = questions_count - len(initial_questions)
+            logger.info(f"Starting background generation for {remaining} remaining questions")
+            bg_generator.generate_remaining_questions_async(
+                session_id=session.id,
+                total_needed=questions_count,
+                already_generated=len(initial_questions)
+            )
 
     except Exception as e:
-        print(f"❌ Error generating questions: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Failed to generate initial questions for session {session.id}: {e}")
+        session.delete()
+        return Response({
+            'error': 'Failed to generate initial questions',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return Response({
         'session_id': session.id,
@@ -75,7 +88,9 @@ def start_quiz(request):
         'difficulty': difficulty,
         'questions_count': questions_count,
         'time_per_question': time_per_question,
-        'use_adaptive_difficulty': use_adaptive_difficulty
+        'use_adaptive_difficulty': use_adaptive_difficulty,
+        'questions_ready': len(initial_questions),
+        'generating_in_background': questions_count > sync_count
     }, status=status.HTTP_201_CREATED)
 
 
@@ -93,80 +108,38 @@ def end_quiz(request, session_id):
     if session.total_questions < session.questions_count:
         print(f"🗑️ Deleting incomplete session {session.id}")
 
-        answered_question_ids = Answer.objects.filter(session=session).values_list('question_id', flat=True)
-
-        unanswered_session_questions = QuizSessionQuestion.objects.filter(
+        # Pobierz wszystkie pytania z tej sesji
+        session_question_ids = list(QuizSessionQuestion.objects.filter(
             session=session
-        ).exclude(
-            question_id__in=answered_question_ids
-        )
+        ).values_list('question_id', flat=True))
 
-        unanswered_question_ids = list(unanswered_session_questions.values_list('question_id', flat=True))
-
+        # Usuń Answer i QuizSessionQuestion
         Answer.objects.filter(session=session).delete()
         QuizSessionQuestion.objects.filter(session=session).delete()
         session.delete()
 
-        orphans_deleted = 0
-        if unanswered_question_ids:
-            for question_id in unanswered_question_ids:
-                try:
-                    other_sessions_count = QuizSessionQuestion.objects.filter(
-                        question_id=question_id
-                    ).count()
+        # Usuń orphaned questions (bez odpowiedzi, nie używane w innych sesjach)
+        if session_question_ids:
+            orphaned_questions = Question.objects.filter(
+                id__in=session_question_ids,
+                total_answers=0
+            )
 
-                    answers_count = Answer.objects.filter(question_id=question_id).count()
+            for orphan_q in orphaned_questions:
+                used_in_active = QuizSessionQuestion.objects.filter(
+                    question=orphan_q,
+                    session__is_completed=False
+                ).exists()
 
-                    if other_sessions_count == 0 and answers_count == 0:
-                        Question.objects.filter(id=question_id).delete()
-                        orphans_deleted += 1
-                except Question.DoesNotExist:
-                    pass
-                except Exception as e:
-                    print(f"⚠️ Could not delete question {question_id}: {e}")
+                if not used_in_active:
+                    print(f"🗑️ Deleting orphaned Question ID={orphan_q.id} (incomplete session)")
+                    orphan_q.delete()
 
-        if orphans_deleted > 0:
-            print(f"✅ Deleted {orphans_deleted} orphan questions")
-
-        return Response({
-            'message': 'Incomplete quiz session deleted',
-            'deleted': True,
-            'orphans_cleaned': orphans_deleted
-        })
+        return Response({'message': 'Incomplete quiz session deleted', 'deleted': True})
 
     session.ended_at = timezone.now()
     session.is_completed = True
     session.save()
-
-    answered_question_ids = Answer.objects.filter(session=session).values_list('question_id', flat=True)
-
-    unanswered_session_questions = QuizSessionQuestion.objects.filter(
-        session=session
-    ).exclude(
-        question_id__in=answered_question_ids
-    )
-
-    orphans_deleted = 0
-    if unanswered_session_questions.exists():
-        unanswered_question_ids = list(unanswered_session_questions.values_list('question_id', flat=True))
-
-        unanswered_session_questions.delete()
-
-        for question_id in unanswered_question_ids:
-            try:
-                other_sessions_count = QuizSessionQuestion.objects.filter(question_id=question_id).count()
-                answers_count = Answer.objects.filter(question_id=question_id).count()
-
-                if other_sessions_count == 0 and answers_count == 0:
-                    Question.objects.filter(id=question_id).delete()
-                    orphans_deleted += 1
-            except Question.DoesNotExist:
-                pass
-            except Exception as e:
-                print(f"⚠️ Could not delete question {question_id}: {e}")
-
-    if orphans_deleted > 0:
-        print(f"✅ Deleted {orphans_deleted} orphan backup questions")
 
     return Response({
         'message': 'Quiz ended successfully',
@@ -174,6 +147,5 @@ def end_quiz(request, session_id):
         'total_questions': session.total_questions,
         'correct_answers': session.correct_answers,
         'accuracy': session.accuracy,
-        'deleted': False,
-        'orphans_cleaned': orphans_deleted
+        'deleted': False
     })

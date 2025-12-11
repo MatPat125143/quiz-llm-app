@@ -1,8 +1,8 @@
+
 """
 Funkcje pomocnicze dla quiz_app
 """
 import random
-from django.core.cache import cache
 
 
 def build_question_payload(session, question, generation_status):
@@ -48,15 +48,3 @@ def build_question_payload(session, question, generation_status):
         'times_used': question.times_used,
         'success_rate': question.success_rate,
     }
-
-
-def cache_next_question_payload(session, question):
-    """
-    Cachuje pytanie jako następne do wyświetlenia.
-
-    Args:
-        session: QuizSession object
-        question: Question object
-    """
-    payload = build_question_payload(session, question, generation_status='cached')
-    cache.set(f'next_q:{session.id}', payload, timeout=120)

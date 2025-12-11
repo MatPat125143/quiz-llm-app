@@ -2,10 +2,13 @@
 Generator pytań quizowych używający OpenAI API
 """
 import json
+import logging
 import random
 from openai import OpenAI
 from .config import LLMConfig
 from .prompts import QuizPrompts
+
+logger = logging.getLogger(__name__)
 
 
 class QuestionGenerator:
@@ -17,21 +20,21 @@ class QuestionGenerator:
 
         # Sprawdź czy klucz API jest ustawiony
         if not LLMConfig.is_openai_available():
-            print("⚠️  OPENAI_API_KEY not set - using fallback questions")
+            logger.warning("OPENAI_API_KEY not set - using fallback questions")
             return
 
         # Inicjalizuj klienta OpenAI
         try:
             self.client = OpenAI(api_key=LLMConfig.OPENAI_API_KEY)
-            print("✅ OpenAI client initialized successfully")
+            logger.info("OpenAI client initialized successfully")
         except ImportError:
-            print("⚠️  openai package not installed - using fallback questions")
+            logger.warning("openai package not installed - using fallback questions")
         except Exception as e:
-            print(f"⚠️  Failed to initialize OpenAI: {e}")
+            logger.error(f"Failed to initialize OpenAI: {e}")
 
-    def generate_multiple_questions(self, topic, difficulty, count, subtopic=None, knowledge_level='high_school'):
+    def generate_multiple_questions(self, topic, difficulty, count, subtopic=None, knowledge_level='high_school', existing_questions=None):
         """
-        Generuje wiele RÓŻNORODNYCH pytań na raz.
+        Generuje wiele RÓŻNORODNYCH pytań na raz z kontekstem pamięci.
 
         Args:
             topic (str): Temat pytań
@@ -39,6 +42,7 @@ class QuestionGenerator:
             count (int): Ile pytań wygenerować
             subtopic (str): Podtemat - opcjonalnie
             knowledge_level (str): Poziom wiedzy
+            existing_questions (list): Lista już zadanych pytań w tej sesji (dla kontekstu)
 
         Returns:
             list: Lista słowników z pytaniami
@@ -48,16 +52,17 @@ class QuestionGenerator:
 
         # Jeśli brak klienta OpenAI, użyj fallback
         if self.client is None:
-            print(f"📝 Generating {count} fallback questions for topic: {topic}, difficulty: {difficulty_text}")
+            logger.info(f"Generating {count} fallback questions for topic: {topic}, difficulty: {difficulty_text}")
             return [self._generate_fallback_question(topic, difficulty_text) for _ in range(count)]
 
         # Generuj pytania używając OpenAI
         try:
-            print(f"🤖 Generating {count} DIVERSE AI questions for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}")
-            return self._generate_multiple_ai_questions(topic, difficulty_text, count, subtopic, knowledge_level)
+            context_msg = f" (with context of {len(existing_questions)} existing)" if existing_questions else ""
+            logger.info(f"Generating {count} diverse AI questions for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}{context_msg}")
+            return self._generate_multiple_ai_questions(topic, difficulty_text, count, subtopic, knowledge_level, existing_questions)
         except Exception as e:
-            print(f"❌ Error generating multiple AI questions: {e}")
-            print(f"📝 Falling back to predefined questions")
+            logger.error(f"Error generating multiple AI questions: {e}")
+            logger.info("Falling back to predefined questions")
             return [self._generate_fallback_question(topic, difficulty_text) for _ in range(count)]
 
     def generate_question(self, topic, difficulty, subtopic=None, knowledge_level='high_school'):
@@ -78,16 +83,16 @@ class QuestionGenerator:
 
         # Jeśli brak klienta OpenAI, użyj fallback
         if self.client is None:
-            print(f"📝 Generating fallback question for topic: {topic}, difficulty: {difficulty_text}")
+            logger.info(f"Generating fallback question for topic: {topic}, difficulty: {difficulty_text}")
             return self._generate_fallback_question(topic, difficulty_text)
 
         # Generuj pytanie używając OpenAI
         try:
-            print(f"🤖 Generating AI question for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}")
+            logger.info(f"Generating AI question for topic: {topic}, subtopic: {subtopic}, knowledge: {knowledge_level}, difficulty: {difficulty_text}")
             return self._generate_ai_question(topic, difficulty_text, subtopic, knowledge_level)
         except Exception as e:
-            print(f"❌ Error generating AI question: {e}")
-            print(f"📝 Falling back to predefined questions")
+            logger.error(f"Error generating AI question: {e}")
+            logger.info("Falling back to predefined questions")
             return self._generate_fallback_question(topic, difficulty_text)
 
     def _normalize_difficulty(self, difficulty):
@@ -98,10 +103,10 @@ class QuestionGenerator:
             return adapter.get_difficulty_level(difficulty)
         return difficulty
 
-    def _generate_multiple_ai_questions(self, topic, difficulty, count, subtopic=None, knowledge_level='high_school'):
-        """Generuje wiele różnorodnych pytań używając OpenAI API"""
+    def _generate_multiple_ai_questions(self, topic, difficulty, count, subtopic=None, knowledge_level='high_school', existing_questions=None):
+        """Generuje wiele różnorodnych pytań używając OpenAI API z kontekstem pamięci"""
         user_prompt = QuizPrompts.build_multiple_questions_prompt(
-            topic, difficulty, count, subtopic, knowledge_level
+            topic, difficulty, count, subtopic, knowledge_level, existing_questions
         )
 
         # Wywołaj OpenAI API
@@ -121,7 +126,7 @@ class QuestionGenerator:
         # Waliduj strukturę
         self._validate_multiple_questions(questions_data, count)
 
-        print(f"✅ Generated {len(questions_data)} diverse AI questions successfully")
+        logger.info(f"Generated {len(questions_data)} diverse AI questions successfully")
         return questions_data
 
     def _generate_ai_question(self, topic, difficulty, subtopic=None, knowledge_level='high_school'):
@@ -147,7 +152,7 @@ class QuestionGenerator:
         # Waliduj strukturę
         self._validate_single_question(question_data)
 
-        print(f"✅ AI question generated successfully")
+        logger.info("AI question generated successfully")
         return question_data
 
     def _clean_json_response(self, content):
@@ -175,7 +180,7 @@ class QuestionGenerator:
             raise ValueError(f"Expected list of questions, got: {type(questions_data)}")
 
         if len(questions_data) != expected_count:
-            print(f"⚠️ Requested {expected_count} questions but got {len(questions_data)}")
+            logger.warning(f"Requested {expected_count} questions but got {len(questions_data)}")
 
         for i, q_data in enumerate(questions_data):
             try:

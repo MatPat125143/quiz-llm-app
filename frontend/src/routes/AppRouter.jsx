@@ -21,6 +21,12 @@ import AdminPanel from '../features/admin/AdminPanel';
 
 // Library
 import QuestionsLibrary from '../features/library/QuestionsLibrary';
+import Leaderboard from '../features/leaderboard/Leaderboard';
+
+// Error Pages
+import NotFound from '../pages/errors/NotFound';
+import Forbidden from '../pages/errors/Forbidden';
+import ServerError from '../pages/errors/ServerError';
 
 export default function AppRouter() {
     return (
@@ -81,12 +87,24 @@ export default function AppRouter() {
                 </ProtectedRoute>
             } />
 
+            {/* Leaderboard */}
+            <Route path="/leaderboard" element={
+                <ProtectedRoute>
+                    <Leaderboard />
+                </ProtectedRoute>
+            } />
+
             {/* Protected Routes - Admin */}
             <Route path="/admin" element={
                 <ProtectedRoute>
                     <AdminPanel />
                 </ProtectedRoute>
             } />
+
+            {/* Error Pages */}
+            <Route path="/403" element={<Forbidden />} />
+            <Route path="/500" element={<ServerError />} />
+            <Route path="*" element={<NotFound />} />
         </Routes>
     );
 }

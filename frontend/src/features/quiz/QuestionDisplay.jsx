@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getQuestion, submitAnswer, getCurrentUser } from '../../services/api';
 import MainLayout from '../../layouts/MainLayout';
 import Spinner from '../../components/Spinner';
+import LatexRenderer from '../../components/LatexRenderer';
 
 export default function QuestionDisplay() {
   const { sessionId } = useParams();
@@ -65,23 +66,39 @@ export default function QuestionDisplay() {
   };
 
   const handleAutoSubmit = () => {
-    if (!selectedAnswer && question) {
-      const randomAnswer = question.answers[Math.floor(Math.random() * question.answers.length)];
-      handleSubmit(randomAnswer, true);
+    // KRYTYCZNE: Wyślij odpowiedź gdy timer się kończy, NIEZALEŻNIE czy gracz wybrał odpowiedź
+    // Jeśli wybrał ale nie kliknął "Sprawdź" - wyślij wybraną
+    // Jeśli nie wybrał - wyślij pustą
+    if (question && !submitting && !result) {
+      handleSubmit(selectedAnswer || '', true);
     }
   };
 
   const handleSubmit = async (answer = selectedAnswer, isAutoSubmit = false) => {
-    if (!answer || submitting) return;
+    // ZABEZPIECZENIE: Jeśli już wysyłamy, ignoruj kolejne wywołania
+    if (submitting) {
+      console.log('⚠️ Already submitting, ignoring duplicate call');
+      return;
+    }
 
-    setSubmitting(true);
+    // Akceptuj pustą odpowiedź tylko przy auto-submit (timeout)
+    if (!answer && !isAutoSubmit) return;
+
+    // NATYCHMIAST zatrzymaj timer i zablokuj kolejne submity
     setTimerActive(false);
+    setSubmitting(true);
 
-    const responseTime = Math.floor((Date.now() - startTime) / 1000);
+    // KRYTYCZNE: Ogranicz responseTime do time_per_question (nie może przekroczyć limitu)
+    const actualResponseTime = Math.floor((Date.now() - startTime) / 1000);
+    const responseTime = Math.min(actualResponseTime, question.time_per_question);
 
     try {
       const response = await submitAnswer(question.question_id, answer, responseTime);
-      setResult(response);
+      // Backend zwraca was_timeout flag
+      setResult({
+        ...response,
+        wasTimeout: response.was_timeout
+      });
 
       if (response.quiz_completed) {
         setTimeout(() => {
@@ -139,12 +156,18 @@ export default function QuestionDisplay() {
       <div className="max-w-4xl mx-auto px-6 py-8">
         {/* Header z timerem */}
         <div className="mb-6 flex justify-between items-center bg-white p-4 rounded-xl shadow-lg">
-          <div className="flex gap-4 text-sm">
+          <div className="flex gap-4 text-sm items-center">
             <span className="font-semibold text-gray-600">
               Pytanie {question.question_number} / {question.questions_count}
             </span>
-            <span className="text-indigo-600 font-semibold">
-              {question.difficulty_label}
+            <span className={`px-3 py-1 rounded-full font-bold ${
+              question.difficulty_label === 'łatwy' ? 'bg-green-100 text-green-700' :
+              question.difficulty_label === 'średni' ? 'bg-yellow-100 text-yellow-700' :
+              'bg-red-100 text-red-700'
+            }`}>
+              {question.difficulty_label === 'łatwy' && '🟢 Łatwy'}
+              {question.difficulty_label === 'średni' && '🟡 Średni'}
+              {question.difficulty_label === 'trudny' && '🔴 Trudny'}
             </span>
           </div>
 
@@ -155,9 +178,10 @@ export default function QuestionDisplay() {
 
         {/* Pytanie */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">
-            {question.question_text}
-          </h2>
+          <LatexRenderer
+            text={question.question_text}
+            className="text-2xl font-bold text-gray-800 mb-6"
+          />
 
           {/* Odpowiedzi */}
           <div className="space-y-3">
@@ -182,7 +206,7 @@ export default function QuestionDisplay() {
                   `}
                 >
                   <span className="font-bold text-indigo-600 mr-3">{letter}.</span>
-                  {answer}
+                  <LatexRenderer text={answer} inline={true} />
                   {isCorrect && <span className="ml-3 text-green-600">✅</span>}
                   {isWrong && <span className="ml-3 text-red-600">❌</span>}
                 </button>
@@ -190,11 +214,19 @@ export default function QuestionDisplay() {
             })}
           </div>
 
+          {/* Timeout Warning */}
+          {result && result.wasTimeout && (
+            <div className="mt-6 p-4 bg-orange-50 border-l-4 border-orange-400 rounded-lg">
+              <p className="font-semibold text-orange-800 mb-1">⏱️ Koniec czasu!</p>
+              <p className="text-gray-700">Nie udzielono odpowiedzi w wymaganym czasie.</p>
+            </div>
+          )}
+
           {/* Wyjaśnienie */}
           {result && result.explanation && (
             <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-lg">
               <p className="font-semibold text-blue-800 mb-1">💡 Wyjaśnienie:</p>
-              <p className="text-gray-700">{result.explanation}</p>
+              <LatexRenderer text={result.explanation} className="text-gray-700" />
             </div>
           )}
 

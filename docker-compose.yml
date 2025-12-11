@@ -76,6 +76,18 @@ services:
       - DJANGO_SECRET_KEY=your-secret-key-change-in-production
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,backend
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MAILJET_API_KEY=${MAILJET_API_KEY}
+      - MAILJET_API_SECRET=${MAILJET_API_SECRET}
+      - MAILJET_FROM_EMAIL=${MAILJET_FROM_EMAIL}
+      - MAILJET_FROM_NAME=${MAILJET_FROM_NAME}
+      - EMAIL_BACKEND=${EMAIL_BACKEND}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
     depends_on:
       db:
         condition: service_healthy

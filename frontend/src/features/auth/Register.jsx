@@ -7,7 +7,8 @@ export default function Register() {
         email: '',
         username: '',
         password: '',
-        confirmPassword: ''
+        confirmPassword: '',
+        knowledgeLevel: 'high_school'
     });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -45,7 +46,7 @@ export default function Register() {
         }
 
         try {
-            await register(formData.email, formData.username, formData.password);
+            await register(formData.email, formData.username, formData.password, formData.knowledgeLevel);
             await login(formData.email, formData.password);
             setSuccess(true);
             setTimeout(() => {
@@ -157,6 +158,28 @@ export default function Register() {
                         />
                         <p className="text-xs text-gray-500 mt-1">
                             Zostaw puste, aby użyć początku emaila jako nazwy użytkownika
+                        </p>
+                    </div>
+
+                    <div className="mb-4">
+                        <label className="block text-gray-700 font-semibold mb-2">
+                            Twój poziom wiedzy *
+                        </label>
+                        <select
+                            name="knowledgeLevel"
+                            value={formData.knowledgeLevel}
+                            onChange={handleChange}
+                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 bg-white"
+                            disabled={loading}
+                            required
+                        >
+                            <option value="elementary">🎒 Szkoła podstawowa</option>
+                            <option value="high_school">🎓 Liceum</option>
+                            <option value="university">🏛️ Studia</option>
+                            <option value="expert">🔬 Ekspert</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Pytania będą dostosowane do Twojego poziomu edukacji
                         </p>
                     </div>
 

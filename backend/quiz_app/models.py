@@ -185,6 +185,12 @@ class Answer(models.Model):
             models.Index(fields=['session', '-answered_at']),
             models.Index(fields=['-answered_at']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['question', 'user', 'session'],
+                name='unique_answer_per_question_session'
+            )
+        ]
 
     def __str__(self):
         return f"{self.user.email} - {'✓' if self.is_correct else '✗'}"

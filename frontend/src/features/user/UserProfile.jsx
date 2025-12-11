@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCurrentUser, updateProfile, changePassword, uploadAvatar, logout } from '../../services/api';
+import { getCurrentUser, updateProfile, changePassword, uploadAvatar, updateProfileSettings, logout } from '../../services/api';
 import MainLayout from '../../layouts/MainLayout';
 
 export default function UserProfile() {
@@ -23,6 +23,10 @@ export default function UserProfile() {
     confirm_password: '',
   });
 
+  const [settingsData, setSettingsData] = useState({
+    default_knowledge_level: 'high_school',
+  });
+
   useEffect(() => {
     loadUser();
   }, []);
@@ -34,6 +38,9 @@ export default function UserProfile() {
       setProfileData({
         username: me.username,
         email: me.email,
+      });
+      setSettingsData({
+        default_knowledge_level: me.profile?.default_knowledge_level || 'high_school',
       });
     } catch (err) {
       console.error('Error loading user:', err);
@@ -95,6 +102,24 @@ const handleAvatarUpload = async (e) => {
     setErrorMsg('❌ Nie udało się przesłać avatara.');
   }
 };
+
+  const handleSettingsUpdate = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setSuccessMsg('');
+    setErrorMsg('');
+
+    try {
+      await updateProfileSettings(settingsData);
+      setSuccessMsg('⚙️ Ustawienia zostały zaktualizowane pomyślnie!');
+      await loadUser();
+    } catch (err) {
+      console.error('Settings update failed:', err);
+      setErrorMsg('❌ Nie udało się zaktualizować ustawień.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!user) {
     return (
@@ -167,6 +192,38 @@ const handleAvatarUpload = async (e) => {
                   className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md disabled:opacity-50"
                 >
                   💾 Zapisz zmiany
+                </button>
+              </form>
+            </div>
+
+            {/* Formularz ustawień quizu */}
+            <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                <span className="text-2xl">⚙️</span> Ustawienia quizu
+              </h2>
+              <form onSubmit={handleSettingsUpdate} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Domyślny poziom wiedzy</label>
+                  <select
+                    value={settingsData.default_knowledge_level}
+                    onChange={(e) => setSettingsData({ ...settingsData, default_knowledge_level: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 transition bg-white"
+                  >
+                    <option value="elementary">🎒 Szkoła podstawowa</option>
+                    <option value="high_school">🎓 Liceum</option>
+                    <option value="university">🏛️ Studia</option>
+                    <option value="expert">🔬 Ekspert</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Pytania będą domyślnie dostosowane do tego poziomu edukacji. Możesz to zmienić podczas tworzenia quizu.
+                  </p>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-cyan-700 transition-all shadow-md disabled:opacity-50"
+                >
+                  💾 Zapisz ustawienia
                 </button>
               </form>
             </div>

@@ -56,12 +56,13 @@ api.interceptors.response.use(
 
 // ==================== AUTH ====================
 
-export const register = async (email, username, password) => {
+export const register = async (email, username, password, defaultKnowledgeLevel = 'high_school') => {
     const response = await api.post('/auth/users/', {
         email,
         username: username || email.split('@')[0],
         password,
-        re_password: password
+        re_password: password,
+        default_knowledge_level: defaultKnowledgeLevel
     });
     return response.data;
 };
@@ -136,6 +137,11 @@ export const deleteAvatar = async () => {
     return response.data;
 };
 
+export const updateProfileSettings = async (data) => {
+    const response = await api.put('/users/settings/', data);
+    return response.data;
+};
+
 // ==================== QUIZ ====================
 
 export const startQuiz = async (topic, difficulty, questionsCount, timePerQuestion, useAdaptiveDifficulty, subtopic = '', knowledgeLevel = 'high_school') => {
@@ -185,6 +191,31 @@ export const getQuestionsLibrary = async (params = {}) => {
     return response.data;
 };
 
+// ==================== LEADERBOARD ====================
+
+export const getGlobalLeaderboard = async (period = 'all', limit = 50) => {
+    const response = await api.get('/quiz/leaderboard/global/', {
+        params: { period, limit }
+    });
+    return response.data;
+};
+
+export const getTopicLeaderboard = async (topic, limit = 50) => {
+    const response = await api.get('/quiz/leaderboard/topic/', {
+        params: { topic, limit }
+    });
+    return response.data;
+};
+
+export const getUserRanking = async () => {
+    const response = await api.get('/quiz/leaderboard/me/');
+    return response.data;
+};
+
+export const getLeaderboardStats = async () => {
+    const response = await api.get('/quiz/leaderboard/stats/');
+    return response.data;
+};
 // ==================== ADMIN ====================
 // UWAGA: Endpointy admina są pod /users/admin/...
 
@@ -228,4 +259,33 @@ export const adminDeleteQuizSession = async (sessionId) => {
     return response.data;
 };
 
+// ==================== ADMIN QUESTIONS ====================
+// UWAGA: Endpointy admina pytań są pod /quiz/admin/questions/...
+
+export const adminGetQuestions = async (params = {}) => {
+    const response = await api.get('/quiz/admin/questions/', { params });
+    return response.data;
+};
+
+export const adminGetQuestionDetail = async (questionId) => {
+    const response = await api.get(`/quiz/admin/questions/${questionId}/`);
+    return response.data;
+};
+
+export const adminUpdateQuestion = async (questionId, data) => {
+    const response = await api.put(`/quiz/admin/questions/${questionId}/update/`, data);
+    return response.data;
+};
+
+export const adminDeleteQuestion = async (questionId) => {
+    const response = await api.delete(`/quiz/admin/questions/${questionId}/delete/`);
+    return response.data;
+};
+
+export const adminGetQuestionStats = async () => {
+    const response = await api.get('/quiz/admin/questions/stats/');
+    return response.data;
+};
+
 export default api;
+

@@ -3,13 +3,21 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Q, Case, When, Value, IntegerField, FloatField, F, ExpressionWrapper
 from django.db.models.functions import Coalesce
 from ..models import QuizSession, Question, QuizSessionQuestion, Answer
-from ..utils.helpers import build_question_payload  # ✅ DODANE
+from ..utils.helpers import build_question_payload
+from ..cache import QuizCacheService
+from llm_integration.difficulty_adapter import DifficultyAdapter
+from ..services.background_generator import BackgroundQuestionGenerator
 import time
+import threading
+import logging
+
+logger = logging.getLogger(__name__)
+difficulty_adapter = DifficultyAdapter()
+bg_generator = BackgroundQuestionGenerator()
 
 
 @api_view(['GET'])
@@ -23,10 +31,10 @@ def get_question(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    cached = cache.get(f'next_q:{session.id}')
+    cached = QuizCacheService.get_cached_question(session.id)
     if cached:
-        cache.delete(f'next_q:{session.id}')
-        print("⚡ Served question from cache")
+        QuizCacheService.delete_cached_question(session.id)
+        logger.info(f"Served cached question for session {session.id}")
         return Response(cached)
 
     answered_question_ids = Answer.objects.filter(
@@ -52,7 +60,7 @@ def get_question(request, session_id):
         poll_interval = 0.5
         waited = 0
 
-        print(f"⏳ Waiting up to {max_wait_time}s for question...")
+        logger.debug(f"Waiting up to {max_wait_time}s for question generation")
 
         while waited < max_wait_time:
             time.sleep(poll_interval)
@@ -67,11 +75,11 @@ def get_question(request, session_id):
             ).select_related('question').order_by('order').first()
 
             if session_question:
-                print(f"⏱️ Question appeared after {waited}s")
+                logger.debug(f"Question generated after {waited}s")
                 break
 
         if not session_question:
-            print(f"❌ No question after {max_wait_time}s")
+            logger.warning(f"No question available after {max_wait_time}s wait for session {session.id}")
             return Response(
                 {'error': 'No more questions available'},
                 status=status.HTTP_404_NOT_FOUND
@@ -79,7 +87,60 @@ def get_question(request, session_id):
 
     question = session_question.question
     generation_status = "pre_generated"
-    print(f"📖 Question ID={question.id}")
+    logger.debug(f"Serving question {question.id} for session {session.id}")
+
+    # NOWE: PRE-GENEROWANIE PRZED WYŚWIETLENIEM PYTANIA
+    # Sprawdź czy gracz zbliża się do zmiany poziomu i wygeneruj pytania ZANIM osiągnie próg
+    if session.use_adaptive_difficulty and session.total_questions < session.questions_count:
+        # Pobierz ostatnie odpowiedzi (włącznie z bieżącym pytaniem które właśnie wysyłamy)
+        recent_answers_objs = Answer.objects.filter(session=session).order_by('-answered_at')[:difficulty_adapter.streak_threshold]
+        recent_answers = [ans.is_correct for ans in reversed(list(recent_answers_objs))]
+
+        # Sprawdź czy zbliżamy się do zmiany poziomu
+        pregenerate_check = difficulty_adapter.should_pregenerate_next_level(
+            session.current_difficulty,
+            recent_answers,
+            session.total_questions,
+            session.questions_count
+        )
+
+        if pregenerate_check['should_pregenerate']:
+            target_level = pregenerate_check['target_level']
+            current_level = difficulty_adapter.get_difficulty_level(session.current_difficulty)
+
+            logger.info(f"Pre-generating questions for level change: {current_level} -> {target_level}")
+
+            answered_ids = Answer.objects.filter(session=session).values_list('question_id', flat=True)
+            existing_target_questions = QuizSessionQuestion.objects.filter(
+                session=session,
+                question__difficulty_level=target_level
+            ).exclude(question_id__in=answered_ids).count()
+
+            if existing_target_questions == 0:
+                questions_remaining = session.questions_count - (session.total_questions + 1)
+                current_questions_in_session = QuizSessionQuestion.objects.filter(session=session).count()
+                actual_space_left = session.questions_count - current_questions_in_session
+                questions_to_generate = min(3, questions_remaining, max(0, actual_space_left))
+
+                if questions_to_generate > 0:
+                    logger.info(f"Pre-generating {questions_to_generate} questions at level '{target_level}'")
+
+                    def async_pregenerate():
+                        try:
+                            bg_generator.generate_adaptive_questions_sync(
+                                session=session,
+                                new_difficulty_level=target_level,
+                                count=questions_to_generate
+                            )
+                        except Exception as e:
+                            logger.error(f"Async pre-generation failed: {e}")
+
+                    thread = threading.Thread(target=async_pregenerate, daemon=True)
+                    thread.start()
+                else:
+                    logger.debug(f"Pre-gen skipped: {questions_remaining} questions remaining")
+            else:
+                logger.debug(f"Pre-gen skipped: {existing_target_questions} questions already exist")
 
     # ✅ UŻYCIE FUNKCJI Z HELPERS zamiast 15 linii inline
     payload = build_question_payload(session, question, generation_status)

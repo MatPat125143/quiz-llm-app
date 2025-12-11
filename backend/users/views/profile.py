@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth import get_user_model
 from ..serializers.user import UserSerializer,UpdateProfileSerializer
-from ..serializers.profile import ChangePasswordSerializer, AvatarSerializer
+from ..serializers.profile import ChangePasswordSerializer, AvatarSerializer, UpdateProfileSettingsSerializer
 
 
 User = get_user_model()
@@ -101,3 +101,22 @@ def delete_avatar(request):
         {'message': 'No avatar to delete'},
         status=status.HTTP_400_BAD_REQUEST
     )
+
+
+# ==================== PROFILE SETTINGS (CHRONIONE) ====================
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def update_profile_settings(request):
+    """Aktualizuj ustawienia profilu (np. domyślny poziom wiedzy)"""
+    profile = request.user.profile
+    serializer = UpdateProfileSettingsSerializer(profile, data=request.data, partial=True)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response({
+            'message': 'Profile settings updated successfully',
+            'profile': UserSerializer(request.user, context={'request': request}).data['profile']
+        })
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

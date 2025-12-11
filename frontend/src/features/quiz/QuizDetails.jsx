@@ -15,6 +15,7 @@ import {
 import annotationPlugin from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
 import MainLayout from '../../layouts/MainLayout';
+import LatexRenderer from '../../components/LatexRenderer';
 
 ChartJS.register(
   LineElement,
@@ -319,7 +320,7 @@ export default function QuizDetails() {
                   )}
                 </div>
 
-                <p className="text-gray-800 font-medium mb-4">{question.question_text}</p>
+                <LatexRenderer text={question.question_text} className="text-gray-800 font-medium mb-4" />
 
                 <div className="space-y-2">
                   {answers.map(({ key, text }) => {
@@ -339,7 +340,7 @@ export default function QuizDetails() {
                         }`}
                       >
                         <span className="font-bold text-indigo-600 mr-2">{key}.</span>
-                        <span className="text-gray-800 break-words">{text}</span>
+                        <LatexRenderer text={text} className="text-gray-800 break-words" inline={true} />
                         {isCorrect && isSelected && (
                           <span className="ml-3 px-2 py-0.5 rounded-lg text-xs bg-green-600 text-white font-semibold">
                             ✅ Twoja odpowiedź
@@ -363,7 +364,7 @@ export default function QuizDetails() {
                 {question.explanation && (
                   <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-lg">
                     <p className="font-semibold text-blue-800">💡 Wyjaśnienie:</p>
-                    <p className="text-gray-700 mt-1">{question.explanation}</p>
+                    <LatexRenderer text={question.explanation} className="text-gray-700 mt-1" />
                   </div>
                 )}
               </div>

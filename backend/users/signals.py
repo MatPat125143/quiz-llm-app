@@ -1,6 +1,9 @@
+import logging
 from django.db.models.signals import post_migrate
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -12,9 +15,9 @@ def create_default_users(sender, **kwargs):
     if sender.name != 'users':
         return
 
-    print('\n' + '=' * 60)
-    print('🔧 CREATING DEFAULT USERS')
-    print('=' * 60)
+    logger.info('=' * 60)
+    logger.info('CREATING DEFAULT USERS')
+    logger.info('=' * 60)
 
     # Admin user
     if not User.objects.filter(email='admin@quiz.com').exists():
@@ -31,11 +34,9 @@ def create_default_users(sender, **kwargs):
         admin_user.profile.role = 'admin'
         admin_user.profile.save()
 
-        print('✅ Admin user created!')
-        print(f'   Email: admin@quiz.com')
-        print(f'   Password: admin123\n')
+        logger.info('Admin user created! Email: admin@quiz.com, Password: admin123')
     else:
-        print('⚠️  Admin user already exists\n')
+        logger.warning('Admin user already exists')
 
     # Regular user
     if not User.objects.filter(email='user@quiz.com').exists():
@@ -50,12 +51,10 @@ def create_default_users(sender, **kwargs):
         regular_user.profile.role = 'user'
         regular_user.profile.save()
 
-        print('✅ Regular user created!')
-        print(f'   Email: user@quiz.com')
-        print(f'   Password: user123\n')
+        logger.info('Regular user created! Email: user@quiz.com, Password: user123')
     else:
-        print('⚠️  Regular user already exists\n')
+        logger.warning('Regular user already exists')
 
-    print('=' * 60)
-    print('🎉 DEFAULT USERS SETUP COMPLETE!')
-    print('=' * 60 + '\n')
+    logger.info('=' * 60)
+    logger.info('DEFAULT USERS SETUP COMPLETE!')
+    logger.info('=' * 60)

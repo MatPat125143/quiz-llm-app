@@ -5,6 +5,7 @@ urlpatterns = [
     # ==================== PROFILE ENDPOINTS ====================
     path('me/', profile.get_current_user, name='current-user'),
     path('update/', profile.update_profile, name='update-profile'),
+    path('settings/', profile.update_profile_settings, name='update-profile-settings'),
     path('change-password/', profile.change_password, name='change-password'),
     path('avatar/upload/', profile.upload_avatar, name='upload-avatar'),
     path('avatar/delete/', profile.delete_avatar, name='delete-avatar'),

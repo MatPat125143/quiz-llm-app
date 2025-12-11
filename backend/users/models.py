@@ -30,9 +30,24 @@ class UserProfile(models.Model):
         ('admin', 'Admin'),
     ]
 
+    KNOWLEDGE_LEVEL_CHOICES = [
+        ('elementary', 'Szkoła podstawowa'),
+        ('high_school', 'Liceum'),
+        ('university', 'Studia'),
+        ('expert', 'Ekspert'),
+    ]
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+
+    # NOWE: Domyślny poziom wiedzy użytkownika
+    default_knowledge_level = models.CharField(
+        max_length=20,
+        choices=KNOWLEDGE_LEVEL_CHOICES,
+        default='high_school',
+        help_text='Domyślny poziom wiedzy używany przy tworzeniu quizów'
+    )
 
     # Statystyki
     total_quizzes_played = models.IntegerField(default=0)

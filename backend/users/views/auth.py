@@ -3,11 +3,12 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
-from django.conf import settings
 from ..models import PasswordResetToken
+from ..services.email_service import email_service
+import logging
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
@@ -28,34 +29,29 @@ def request_password_reset(request):
     try:
         user = User.objects.get(email=email)
 
-        # Usuń stare nieużyte tokeny tego usera
         PasswordResetToken.objects.filter(user=user, used=False).delete()
 
-        # Wygeneruj i zapisz nowy token
         code = PasswordResetToken.generate_code()
         PasswordResetToken.objects.create(user=user, code=code)
 
-        # Wyślij email z kodem
-        send_mail(
-            subject='Password Reset Code - Quiz App',
-            message=f'Your password reset code is: {code}\n\nThis code will expire in 1 hour.\n\nIf you did not request this, please ignore this email.',
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[email],
-            fail_silently=False,
-        )
+        email_sent = email_service.send_password_reset_email(email, code)
+
+        if not email_sent:
+            logger.error(f"Failed to send password reset email to {email}")
+            return Response({
+                'error': 'Failed to send reset code. Please try again later.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
             'message': 'Password reset code sent to your email'
         })
 
     except User.DoesNotExist:
-        # Security: Nie ujawniaj czy email istnieje w bazie
         return Response({
             'message': 'If an account with that email exists, a reset code has been sent'
         })
     except Exception as e:
-        # Loguj błąd do konsoli (w produkcji użyj proper loggera)
-        print(f"Error sending password reset email: {e}")
+        logger.error(f"Error in password reset request: {e}")
         return Response({
             'error': 'Failed to send reset code. Please try again later.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
