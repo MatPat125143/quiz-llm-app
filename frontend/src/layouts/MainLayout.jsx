@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../services/api';
 
-export default function MainLayout({ children, user }) {
+export default function MainLayout({ children, user, hideChrome = false }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const navigate = useNavigate();
 
@@ -32,6 +32,7 @@ export default function MainLayout({ children, user }) {
     return (
         <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
             {/* Navbar */}
+            {!hideChrome && (
             <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
                     <div className="flex justify-between items-center">
@@ -140,8 +141,11 @@ export default function MainLayout({ children, user }) {
                     </div>
                 </div>
             </header>
+            )}
 
             {/* Mobile Sidebar */}
+            {!hideChrome && (
+            <>
             <div
                 className={`fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden transition-opacity ${sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                 onClick={() => setSidebarOpen(false)}
@@ -241,6 +245,8 @@ export default function MainLayout({ children, user }) {
                     </nav>
                 </div>
             </aside>
+            </>
+            )}
 
             {/* Main Content */}
             <main className="flex-1">
@@ -248,6 +254,7 @@ export default function MainLayout({ children, user }) {
             </main>
 
             {/* Footer */}
+            {!hideChrome && (
             <footer className="bg-white border-t border-gray-200 mt-auto">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -352,6 +359,7 @@ export default function MainLayout({ children, user }) {
                     </div>
                 </div>
             </footer>
+            )}
         </div>
     );
 }

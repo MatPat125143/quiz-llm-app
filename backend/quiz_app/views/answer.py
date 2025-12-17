@@ -1,4 +1,6 @@
 import logging
+import threading
+from django.db import transaction, IntegrityError
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -60,6 +62,10 @@ def submit_answer(request):
             }
         })
 
+    # Pusta odpowiedź (timeout) = zawsze błędna
+    is_timeout = not bool(selected_answer)
+
+    # Idempotencja: jeżeli odpowiedź już istnieje (np. auto-submit + refresh), zwróć ją bez ponownego zapisu
     existing_answer = Answer.objects.filter(
         question=question,
         user=request.user,
@@ -80,9 +86,6 @@ def submit_answer(request):
             }
         })
 
-    # Pusta odpowiedź (timeout) = zawsze błędna
-    is_timeout = not bool(selected_answer)
-
     # KRYTYCZNE: Porównanie z trim() i normalizacją białych znaków
     if selected_answer:
         # Normalizuj obie strony: trim + usuń multiple spaces + lowercase dla porównania
@@ -98,15 +101,40 @@ def submit_answer(request):
     else:
         is_correct = False
 
-    answer = Answer.objects.create(
-        question=question,
-        user=request.user,
-        session=session,
-        selected_answer=selected_answer,
-        is_correct=is_correct,
-        response_time=response_time,
-        difficulty_at_answer=session.current_difficulty
-    )
+    try:
+        with transaction.atomic():
+            answer, created = Answer.objects.get_or_create(
+                question=question,
+                user=request.user,
+                session=session,
+                defaults={
+                    'selected_answer': selected_answer or '',
+                    'is_correct': is_correct,
+                    'response_time': response_time,
+                    'difficulty_at_answer': session.current_difficulty
+                }
+            )
+    except IntegrityError:
+        answer = Answer.objects.filter(
+            question=question,
+            user=request.user,
+            session=session
+        ).first()
+        created = False
+
+    if not created:
+        return Response({
+            'is_correct': answer.is_correct,
+            'correct_answer': question.correct_answer,
+            'explanation': question.explanation,
+            'current_streak': session.current_streak,
+            'quiz_completed': session.is_completed,
+            'session_stats': {
+                'total_questions': session.total_questions,
+                'correct_answers': session.correct_answers,
+                'accuracy': session.accuracy
+            }
+        })
 
     session.total_questions += 1
     if session.total_questions > session.questions_count:
@@ -222,34 +250,37 @@ def submit_answer(request):
                     actually_needed = max(0, questions_remaining - unused_questions_count)
 
                     if actually_needed > 0:
-                        # NOWE: Generuj 3 pytania SYNC (dla instant availability), resztę ASYNC
+                        # Generacja na nowy poziom uruchamiana w tle, aby nie blokować wyświetlenia wyjaśnienia
                         sync_count = min(3, actually_needed)
 
-                        logger.info(f"Generating {sync_count} questions sync for new level '{new_difficulty_level}' (total need: {actually_needed})")
-
-                        try:
-                            generated = bg_generator.generate_adaptive_questions_sync(
-                                session=session,
-                                new_difficulty_level=new_difficulty_level,
-                                count=sync_count
-                            )
-                            logger.info(f"Generated {generated} questions sync for level '{new_difficulty_level}'")
-
-                            # Jeżeli potrzeba więcej niż sync_count, uruchom async generation
-                            if actually_needed > sync_count:
-                                async_count = actually_needed - sync_count
-                                logger.info(f"Starting async generation of {async_count} more questions for level '{new_difficulty_level}'")
-
-                                # Użyj generate_remaining_questions_async
-                                current_total = QuizSessionQuestion.objects.filter(session=session).count()
-                                bg_generator.generate_remaining_questions_async(
-                                    session_id=session.id,
-                                    total_needed=session.questions_count,
-                                    already_generated=current_total
+                        def generate_for_new_level():
+                            try:
+                                from django.db import connection
+                                connection.close()
+                            except Exception:
+                                pass
+                            try:
+                                generated = bg_generator.generate_adaptive_questions_sync(
+                                    session=session,
+                                    new_difficulty_level=new_difficulty_level,
+                                    count=sync_count
                                 )
+                                logger.info(f"Generated {generated} questions sync for level '{new_difficulty_level}' (async thread)")
 
-                        except Exception as e:
-                            logger.error(f"Error generating adaptive questions: {e}")
+                                if actually_needed > sync_count:
+                                    async_count = actually_needed - sync_count
+                                    logger.info(f"Starting async generation of {async_count} more questions for level '{new_difficulty_level}' (async thread)")
+
+                                    current_total = QuizSessionQuestion.objects.filter(session=session).count()
+                                    bg_generator.generate_remaining_questions_async(
+                                        session_id=session.id,
+                                        total_needed=session.questions_count,
+                                        already_generated=current_total
+                                    )
+                            except Exception as e:
+                                logger.error(f"Error generating adaptive questions (async): {e}")
+
+                        threading.Thread(target=generate_for_new_level, daemon=True).start()
                     else:
                         logger.info(f"No need to generate questions - enough in queue (need: {actually_needed}, have: {unused_questions_count})")
 
