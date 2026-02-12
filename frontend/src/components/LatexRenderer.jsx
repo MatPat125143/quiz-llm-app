@@ -7,71 +7,42 @@ export default function LatexRenderer({ text, className = '', inline = false }) 
     if (!text) return null;
 
     const parts = [];
-    let lastIndex = 0;
+    const mathRegex = /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g;
+    let cursor = 0;
     let key = 0;
 
-    const blockRegex = /\$\$(.*?)\$\$/g;
-    const inlineRegex = /\$(.*?)\$/g;
+    for (const match of text.matchAll(mathRegex)) {
+      const full = match[0];
+      const start = match.index ?? 0;
+      const end = start + full.length;
 
-    const blockMatches = [...text.matchAll(blockRegex)];
-    const inlineMatches = [...text.matchAll(inlineRegex)];
-
-    const allMatches = [
-      ...blockMatches.map(m => ({ match: m, type: 'block' })),
-      ...inlineMatches.map(m => ({ match: m, type: 'inline' }))
-    ].sort((a, b) => a.match.index - b.match.index);
-
-    const processedRanges = new Set();
-
-    allMatches.forEach(({ match, type }) => {
-      const start = match.index;
-      const end = start + match[0].length;
-
-      if ([...processedRanges].some(range =>
-        (start >= range.start && start < range.end) ||
-        (end > range.start && end <= range.end)
-      )) {
-        return;
-      }
-
-      if (start > lastIndex) {
-        const textBefore = text.substring(lastIndex, start);
-        if (textBefore) {
-          parts.push(
-            <span key={`text-${key++}`}>
-              {textBefore}
-            </span>
-          );
+      if (start > cursor) {
+        const plain = text.slice(cursor, start);
+        if (plain) {
+          parts.push(<span key={`text-${key++}`}>{plain}</span>);
         }
       }
 
-      const latex = match[1];
+      const isBlock = full.startsWith('$$') && full.endsWith('$$');
+      const latex = isBlock ? full.slice(2, -2) : full.slice(1, -1);
 
-      if (type === 'block') {
+      if (isBlock) {
         parts.push(
           <div key={`block-${key++}`} className="my-2">
             <BlockMath math={latex} />
           </div>
         );
-        processedRanges.add({ start: start, end: end });
       } else {
-        parts.push(
-          <InlineMath key={`inline-${key++}`} math={latex} />
-        );
-        processedRanges.add({ start: start, end: end });
+        parts.push(<InlineMath key={`inline-${key++}`} math={latex} />);
       }
 
-      lastIndex = end;
-    });
+      cursor = end;
+    }
 
-    if (lastIndex < text.length) {
-      const textAfter = text.substring(lastIndex);
-      if (textAfter) {
-        parts.push(
-          <span key={`text-${key++}`}>
-            {textAfter}
-          </span>
-        );
+    if (cursor < text.length) {
+      const tail = text.slice(cursor);
+      if (tail) {
+        parts.push(<span key={`text-${key++}`}>{tail}</span>);
       }
     }
 

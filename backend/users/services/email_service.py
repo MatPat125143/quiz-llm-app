@@ -1,30 +1,18 @@
 import logging
 import os
-import requests
+from smtplib import SMTPException
 from django.core.mail import send_mail
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    """Service for sending emails via Django mail (supports SMTP and Mailjet)"""
 
     def __init__(self):
         self.from_email = os.getenv('DEFAULT_FROM_EMAIL', 'quiz-llm-app@wp.pl')
         self.from_name = os.getenv('MAILJET_FROM_NAME', 'Quiz LLM App')
 
     def send_password_reset_email(self, recipient_email, reset_code):
-        """
-        Send password reset email with verification code.
-
-        Args:
-            recipient_email (str): Recipient's email address
-            reset_code (str): 6-digit verification code
-
-        Returns:
-            bool: True if email sent successfully, False otherwise
-        """
         subject = "Kod resetowania hasła - Quiz LLM App"
 
         html_content = f"""
@@ -72,21 +60,11 @@ Jeśli nie prosiłeś o reset hasła, zignoruj tę wiadomość - Twoje hasło po
             logger.info(f"Password reset email sent to {recipient_email}")
             return True
 
-        except Exception as e:
+        except (SMTPException, OSError, RuntimeError, TypeError, ValueError) as e:
             logger.error(f"Failed to send password reset email to {recipient_email}: {e}")
             return False
 
     def send_welcome_email(self, recipient_email, username):
-        """
-        Send welcome email to new user.
-
-        Args:
-            recipient_email (str): Recipient's email address
-            username (str): User's username
-
-        Returns:
-            bool: True if email sent successfully, False otherwise
-        """
         subject = "Witamy w Quiz LLM App!"
 
         html_content = f"""
@@ -131,10 +109,9 @@ Jeśli masz pytania, skontaktuj się z naszym zespołem wsparcia.
             logger.info(f"Welcome email sent to {recipient_email}")
             return True
 
-        except Exception as e:
+        except (SMTPException, OSError, RuntimeError, TypeError, ValueError) as e:
             logger.error(f"Failed to send welcome email to {recipient_email}: {e}")
             return False
 
 
-# Singleton instance
 email_service = EmailService()

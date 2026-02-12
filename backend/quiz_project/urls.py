@@ -4,7 +4,6 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth.models import Group
 
-# Bezpieczne wyrejestrowanie Group (tylko jeśli jest zarejestrowany)
 try:
     admin.site.unregister(Group)
 except admin.sites.NotRegistered:
@@ -18,6 +17,5 @@ urlpatterns = [
     path('api/quiz/', include('quiz_app.urls')),
 ]
 
-# Dodaj obsługę media files (avatary)
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

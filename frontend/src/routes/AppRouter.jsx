@@ -1,29 +1,29 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from '../components/ProtectedRoute';
 
-// Auth
+
 import Login from '../features/auth/Login';
 import Register from '../features/auth/Register';
 import ForgotPassword from '../features/auth/ForgotPassword';
 
-// User
+
 import UserDashboard from '../features/user/UserDashboard';
 import UserProfile from '../features/user/UserProfile';
 
-// Quiz
+
 import QuizSetup from '../features/quiz/QuizSetup';
-import QuestionDisplay from '../features/quiz/QuestionDisplay';
+import QuestionDisplay from '../features/quiz/play/QuestionDisplay';
 import QuizDetails from '../features/quiz/QuizDetails';
 import QuizHistory from '../features/quiz/QuizHistory';
 
-// Admin
+
 import AdminPanel from '../features/admin/AdminPanel';
 
-// Library
+
 import QuestionsLibrary from '../features/library/QuestionsLibrary';
 import Leaderboard from '../features/leaderboard/Leaderboard';
 
-// Error Pages
+
 import NotFound from '../pages/errors/NotFound';
 import Forbidden from '../pages/errors/Forbidden';
 import ServerError from '../pages/errors/ServerError';
@@ -31,13 +31,11 @@ import ServerError from '../pages/errors/ServerError';
 export default function AppRouter() {
     return (
         <Routes>
-            {/* Public Routes */}
             <Route path="/" element={<Navigate to="/login" />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
 
-            {/* Protected Routes - User */}
             <Route path="/dashboard" element={
                 <ProtectedRoute>
                     <UserDashboard />
@@ -50,20 +48,19 @@ export default function AppRouter() {
                 </ProtectedRoute>
             } />
 
-            {/* Protected Routes - Quiz */}
             <Route path="/quiz/setup" element={
                 <ProtectedRoute>
                     <QuizSetup />
                 </ProtectedRoute>
             } />
 
-            <Route path="/quiz/new" element={
+            <Route path="/quiz/play/:sessionId" element={
                 <ProtectedRoute>
-                    <QuizSetup />
+                    <QuestionDisplay />
                 </ProtectedRoute>
             } />
 
-            <Route path="/quiz/play/:sessionId" element={
+            <Route path="/quiz/play" element={
                 <ProtectedRoute>
                     <QuestionDisplay />
                 </ProtectedRoute>
@@ -87,23 +84,21 @@ export default function AppRouter() {
                 </ProtectedRoute>
             } />
 
-            {/* Leaderboard */}
             <Route path="/leaderboard" element={
                 <ProtectedRoute>
                     <Leaderboard />
                 </ProtectedRoute>
             } />
 
-            {/* Protected Routes - Admin */}
             <Route path="/admin" element={
                 <ProtectedRoute>
                     <AdminPanel />
                 </ProtectedRoute>
             } />
 
-            {/* Error Pages */}
             <Route path="/403" element={<Forbidden />} />
             <Route path="/500" element={<ServerError />} />
+            <Route path="/404" element={<NotFound />} />
             <Route path="*" element={<NotFound />} />
         </Routes>
     );

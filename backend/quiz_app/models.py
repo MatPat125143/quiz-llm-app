@@ -1,6 +1,7 @@
+import hashlib
+
 from django.conf import settings
 from django.db import models
-import hashlib
 
 
 class QuizSession(models.Model):
@@ -13,8 +14,8 @@ class QuizSession(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='quiz_sessions')
     topic = models.CharField(max_length=200)
-    subtopic = models.CharField(max_length=200, blank=True, null=True)  # NOWE: podtemat
-    knowledge_level = models.CharField(max_length=20, choices=KNOWLEDGE_LEVEL_CHOICES, default='high_school')  # NOWE: poziom wiedzy
+    subtopic = models.CharField(max_length=200, blank=True, null=True)
+    knowledge_level = models.CharField(max_length=20, choices=KNOWLEDGE_LEVEL_CHOICES, default='high_school')
     initial_difficulty = models.CharField(max_length=20)
     current_difficulty = models.FloatField(default=1.0)
     started_at = models.DateTimeField(auto_now_add=True)
@@ -26,7 +27,7 @@ class QuizSession(models.Model):
     questions_count = models.IntegerField(default=10)
     time_per_question = models.IntegerField(default=30)
     use_adaptive_difficulty = models.BooleanField(default=True)
-    questions_generated_count = models.IntegerField(default=0)  # NOWE: licznik wygenerowanych pytań dla seryjnego generowania
+    questions_generated_count = models.IntegerField(default=0)
 
     class Meta:
         ordering = ['-started_at']
@@ -48,7 +49,6 @@ class QuizSession(models.Model):
 
 
 class Question(models.Model):
-    """GLOBALNE pytanie - może być używane w wielu quizach"""
     DIFFICULTY_CHOICES = [
         ('łatwy', 'Łatwy'),
         ('średni', 'Średni'),
@@ -62,7 +62,6 @@ class Question(models.Model):
         ('expert', 'Ekspert'),
     ]
 
-    # session teraz OPCJONALNE (dla kompatybilności)
     session = models.ForeignKey(
         QuizSession,
         on_delete=models.CASCADE,
@@ -71,10 +70,9 @@ class Question(models.Model):
         blank=True
     )
 
-    # NOWE POLA dla globalnych pytań
     topic = models.CharField(max_length=200, db_index=True)
-    subtopic = models.CharField(max_length=200, blank=True, null=True, db_index=True)  # NOWE: podtemat
-    knowledge_level = models.CharField(max_length=20, choices=KNOWLEDGE_LEVEL_CHOICES, blank=True, null=True)  # NOWE: poziom wiedzy
+    subtopic = models.CharField(max_length=200, blank=True, null=True, db_index=True)
+    knowledge_level = models.CharField(max_length=20, choices=KNOWLEDGE_LEVEL_CHOICES, blank=True, null=True)
     question_text = models.TextField()
     correct_answer = models.CharField(max_length=500)
     wrong_answer_1 = models.CharField(max_length=500)
@@ -84,8 +82,9 @@ class Question(models.Model):
     difficulty_level = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='średni')
     embedding_vector = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
 
-    # Nowe metadane
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -94,12 +93,10 @@ class Question(models.Model):
         related_name='created_questions'
     )
 
-    # Statystyki
     total_answers = models.IntegerField(default=0)
     correct_answers_count = models.IntegerField(default=0)
     times_used = models.IntegerField(default=0)
 
-    # Hash dla deduplikacji
     content_hash = models.CharField(max_length=64, db_index=True, null=True, blank=True)
 
     class Meta:
@@ -124,7 +121,6 @@ class Question(models.Model):
 
     @property
     def incorrect_answers_count(self):
-        """Oblicz niepoprawne odpowiedzi dynamicznie"""
         return max(0, self.total_answers - self.correct_answers_count)
 
     def update_stats(self, is_correct):
@@ -133,15 +129,38 @@ class Question(models.Model):
             self.correct_answers_count += 1
         self.save(update_fields=['total_answers', 'correct_answers_count'])
 
+    @staticmethod
+    def build_content_hash(
+        question_text,
+        correct_answer,
+        topic,
+        subtopic=None,
+        knowledge_level=None,
+        difficulty_level=None,
+    ):
+        content = (
+            f"{question_text}{correct_answer}{topic}"
+            f"{subtopic or ''}{knowledge_level or ''}{difficulty_level}"
+        )
+        return hashlib.sha256(content.encode()).hexdigest()
+
+    def compute_content_hash(self):
+        return self.build_content_hash(
+            self.question_text,
+            self.correct_answer,
+            self.topic,
+            self.subtopic,
+            self.knowledge_level,
+            self.difficulty_level,
+        )
+
     def save(self, *args, **kwargs):
         if not self.content_hash:
-            content = f"{self.question_text}{self.correct_answer}{self.topic}{self.subtopic or ''}{self.knowledge_level or ''}{self.difficulty_level}"
-            self.content_hash = hashlib.sha256(content.encode()).hexdigest()
+            self.content_hash = self.compute_content_hash()
         super().save(*args, **kwargs)
 
 
 class QuizSessionQuestion(models.Model):
-    """NOWY MODEL - łączy pytanie z sesją"""
     session = models.ForeignKey(QuizSession, on_delete=models.CASCADE, related_name='session_questions')
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='question_sessions')
     order = models.IntegerField(default=0)
@@ -193,4 +212,4 @@ class Answer(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.user.email} - {'✓' if self.is_correct else '✗'}"
+        return f"{self.user.email} - {'correct' if self.is_correct else 'wrong'}"

@@ -1,21 +1,20 @@
 from django.urls import path
-from .views import profile, auth, admin
+from .views import profile_view as profile, auth_view as auth, admin_view as admin
 
 urlpatterns = [
-    # ==================== PROFILE ENDPOINTS ====================
+
     path('me/', profile.get_current_user, name='current-user'),
     path('update/', profile.update_profile, name='update-profile'),
     path('settings/', profile.update_profile_settings, name='update-profile-settings'),
+    path('delete/', profile.delete_my_account, name='delete-my-account'),
     path('change-password/', profile.change_password, name='change-password'),
     path('avatar/upload/', profile.upload_avatar, name='upload-avatar'),
     path('avatar/delete/', profile.delete_avatar, name='delete-avatar'),
 
-    # ==================== PASSWORD RESET ENDPOINTS ====================
     path('password-reset/request/', auth.request_password_reset, name='request-password-reset'),
     path('password-reset/verify/', auth.verify_reset_code, name='verify-reset-code'),
     path('password-reset/confirm/', auth.reset_password_with_code, name='reset-password-confirm'),
 
-    # ==================== ADMIN ENDPOINTS ====================
     path('admin/dashboard/', admin.admin_dashboard, name='admin-dashboard'),
     path('admin/users/', admin.all_users, name='admin-users'),
     path('admin/users/search/', admin.search_users, name='admin-search-users'),

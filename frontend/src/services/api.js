@@ -1,60 +1,4 @@
-import axios from 'axios';
-
-const API_URL = 'http://localhost:8000/api';
-
-const api = axios.create({
-    baseURL: API_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    }
-});
-
-// Request interceptor - dodaj token do każdego requesta
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('access_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
-
-// Response interceptor - refresh token gdy wygaśnie
-api.interceptors.response.use(
-    (response) => response,
-    async (error) => {
-        const originalRequest = error.config;
-
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-
-            try {
-                const refreshToken = localStorage.getItem('refresh_token');
-                const response = await axios.post(`${API_URL}/auth/jwt/refresh/`, {
-                    refresh: refreshToken
-                });
-
-                localStorage.setItem('access_token', response.data.access);
-                originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
-
-                return api(originalRequest);
-            } catch (refreshError) {
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('refresh_token');
-                window.location.href = '/login';
-                return Promise.reject(refreshError);
-            }
-        }
-
-        return Promise.reject(error);
-    }
-);
-
-// ==================== AUTH ====================
+import api from './apiClient';
 
 export const register = async (email, username, password, defaultKnowledgeLevel = 'high_school') => {
     const response = await api.post('/auth/users/', {
@@ -103,7 +47,7 @@ export const resetPasswordWithCode = async (email, code, newPassword) => {
     return response.data;
 };
 
-// ==================== USER PROFILE ====================
+
 
 export const getCurrentUser = async () => {
     const response = await api.get('/users/me/');
@@ -142,7 +86,12 @@ export const updateProfileSettings = async (data) => {
     return response.data;
 };
 
-// ==================== QUIZ ====================
+export const deleteMyAccount = async () => {
+    const response = await api.delete('/users/delete/');
+    return response.data;
+};
+
+
 
 export const startQuiz = async (topic, difficulty, questionsCount, timePerQuestion, useAdaptiveDifficulty, subtopic = '', knowledgeLevel = 'high_school') => {
     const response = await api.post('/quiz/start/', {
@@ -191,18 +140,11 @@ export const getQuestionsLibrary = async (params = {}) => {
     return response.data;
 };
 
-// ==================== LEADERBOARD ====================
+
 
 export const getGlobalLeaderboard = async (period = 'all', limit = 50) => {
     const response = await api.get('/quiz/leaderboard/global/', {
         params: { period, limit }
-    });
-    return response.data;
-};
-
-export const getTopicLeaderboard = async (topic, limit = 50) => {
-    const response = await api.get('/quiz/leaderboard/topic/', {
-        params: { topic, limit }
     });
     return response.data;
 };
@@ -216,8 +158,8 @@ export const getLeaderboardStats = async () => {
     const response = await api.get('/quiz/leaderboard/stats/');
     return response.data;
 };
-// ==================== ADMIN ====================
-// UWAGA: Endpointy admina są pod /users/admin/...
+
+
 
 export const getAdminDashboard = async () => {
     const response = await api.get('/users/admin/dashboard/');
@@ -259,8 +201,8 @@ export const adminDeleteQuizSession = async (sessionId) => {
     return response.data;
 };
 
-// ==================== ADMIN QUESTIONS ====================
-// UWAGA: Endpointy admina pytań są pod /quiz/admin/questions/...
+
+
 
 export const adminGetQuestions = async (params = {}) => {
     const response = await api.get('/quiz/admin/questions/', { params });
@@ -288,4 +230,3 @@ export const adminGetQuestionStats = async () => {
 };
 
 export default api;
-

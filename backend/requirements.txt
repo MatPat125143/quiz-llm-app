@@ -1,32 +1,24 @@
-# Django core
 Django==4.2.7
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
 django-filter==23.5
 
-# Auth
 djoser==2.2.2
 djangorestframework-simplejwt==5.3.1
 
-# Database
 psycopg2-binary==2.9.11
 
-# Cache - Redis
 django-redis==5.4.0
 redis==5.0.1
 
-# Storage
 Pillow==10.1.0
 
-# LLM Integration - KLUCZOWE: >= 1.30.0 żeby NIE było błędu proxies!
 openai>=1.30.0
 
-# Embeddings - kompatybilne wersje
 torch==2.1.0
 transformers==4.35.0
 sentence-transformers==2.2.2
 
-# Utils
 python-dotenv==1.0.0
 requests==2.31.0
 numpy==1.24.3

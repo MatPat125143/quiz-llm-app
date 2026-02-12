@@ -1,6 +1,7 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { login } from '../../services/api';
+import useThemeToggle from '../../hooks/useThemeToggle';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -8,6 +9,7 @@ export default function Login() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const { theme, toggleTheme } = useThemeToggle();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -16,8 +18,7 @@ export default function Login() {
 
         try {
             await login(email, password);
-            navigate('/dashboard');
-            window.location.reload();
+            navigate('/dashboard', { replace: true });
         } catch (err) {
             console.error('Login error:', err);
             setError('Nieprawidłowy email lub hasło');
@@ -27,32 +28,41 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600 p-4">
+            <button
+                type="button"
+                onClick={toggleTheme}
+                className="absolute top-4 right-4 h-10 w-10 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center"
+                aria-label="Przełącz motyw"
+                title="Przełącz motyw"
+            >
+                {theme === 'dark' ? '🌙' : '☀️'}
+            </button>
+            <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-2xl border border-gray-100 dark:border-slate-800 w-full max-w-md">
                 <div className="text-center mb-8">
                     <div className="text-6xl mb-4">🎮</div>
-                    <h1 className="text-3xl font-bold text-gray-800 mb-2">
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-slate-100 mb-2">
                         Witaj ponownie!
                     </h1>
-                    <p className="text-gray-600">Zaloguj się, aby kontynuować</p>
+                    <p className="text-gray-600 dark:text-slate-300">Zaloguj się, aby kontynuować</p>
                 </div>
 
                 {error && (
-                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                    <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded mb-4">
                         {error}
                     </div>
                 )}
 
                 <form onSubmit={handleSubmit}>
                     <div className="mb-4">
-                        <label className="block text-gray-700 font-semibold mb-2">
+                        <label className="block text-gray-700 dark:text-slate-200 font-semibold mb-2">
                             Adres email
                         </label>
                         <input
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                            className="ui-input placeholder:text-gray-400 dark:placeholder:text-slate-400"
                             placeholder="twoj@email.com"
                             required
                             disabled={loading}
@@ -60,14 +70,14 @@ export default function Login() {
                     </div>
 
                     <div className="mb-6">
-                        <label className="block text-gray-700 font-semibold mb-2">
+                        <label className="block text-gray-700 dark:text-slate-200 font-semibold mb-2">
                             Hasło
                         </label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                            className="ui-input placeholder:text-gray-400 dark:placeholder:text-slate-400"
                             placeholder="••••••••"
                             required
                             disabled={loading}
@@ -77,22 +87,22 @@ export default function Login() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-indigo-600 dark:bg-indigo-700 text-white py-3 rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-600 transition font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? 'Logowanie...' : 'Zaloguj się'}
                     </button>
                 </form>
 
                 <div className="mt-4 text-center">
-                    <Link to="/forgot-password" className="text-blue-600 hover:text-blue-700 font-semibold">
+                    <Link to="/forgot-password" className="text-indigo-600 dark:text-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-200 font-semibold">
                         Zapomniałeś hasła?
                     </Link>
                 </div>
 
                 <div className="mt-6 text-center">
-                    <p className="text-gray-600">
+                    <p className="text-gray-600 dark:text-slate-300">
                         Nie masz konta?{' '}
-                        <Link to="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
+                        <Link to="/register" className="text-indigo-600 dark:text-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-200 font-semibold">
                             Zarejestruj się
                         </Link>
                     </p>
@@ -101,3 +111,4 @@ export default function Login() {
         </div>
     );
 }
+

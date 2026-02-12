@@ -4,11 +4,9 @@ User = get_user_model()
 
 
 class UserService:
-    """Logika biznesowa dla zarządzania użytkownikami"""
 
     @staticmethod
     def get_user_statistics(user):
-        """Pobierz statystyki użytkownika"""
         return {
             'total_quizzes': user.profile.total_quizzes_played,
             'total_questions': user.profile.total_questions_answered,
@@ -19,12 +17,10 @@ class UserService:
 
     @staticmethod
     def update_user_stats(user):
-        """Aktualizuj statystyki użytkownika na podstawie jego odpowiedzi"""
         from quiz_app.models import Answer, QuizSession
 
         profile = user.profile
 
-        # Aktualizuj statystyki z ukończonych quizów
         completed_answers = Answer.objects.filter(
             user=user,
             session__is_completed=True
@@ -33,7 +29,6 @@ class UserService:
         profile.total_questions_answered = completed_answers.count()
         profile.total_correct_answers = completed_answers.filter(is_correct=True).count()
 
-        # Oblicz najdłuższą serię
         completed_sessions = QuizSession.objects.filter(user=user, is_completed=True)
         max_streak = 0
         for session in completed_sessions:

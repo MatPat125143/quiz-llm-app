@@ -2,6 +2,270 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg-app: #f7f8fb;
+    --surface-1: #ffffff;
+    --surface-2: #f3f4f6;
+    --text-main: #111827;
+    --text-muted: #6b7280;
+    --border-soft: #e5e7eb;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --bg-app: #0b0f19;
+    --surface-1: #111827;
+    --surface-2: #0f172a;
+    --text-main: #e5e7eb;
+    --text-muted: #9ca3af;
+    --border-soft: #1f2937;
+  }
+
+  body {
+    background-color: var(--bg-app);
+    color: var(--text-main);
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+  }
+
+  .dark select {
+    color: #e5e7eb;
+  }
+
+  .dark option {
+    background-color: #0f172a;
+    color: #e5e7eb;
+  }
+}
+
+@layer utilities {
+  .dark .app-scope .bg-white {
+    background-color: var(--surface-1) !important;
+  }
+  .dark .app-scope .bg-gray-50,
+  .dark .app-scope .bg-gray-100 {
+    background-color: var(--surface-2) !important;
+  }
+  .dark .app-scope .bg-indigo-50,
+  .dark .app-scope .bg-blue-50 {
+    background-color: #0f1c33 !important;
+  }
+  .dark .app-scope [class*="bg-white/"] {
+    background-color: rgba(17, 24, 39, 0.85) !important;
+  }
+  .dark .app-scope .text-gray-900,
+  .dark .app-scope .text-gray-800,
+  .dark .app-scope .text-gray-700 {
+    color: var(--text-main) !important;
+  }
+  .dark .app-scope .text-gray-600,
+  .dark .app-scope .text-gray-500 {
+    color: var(--text-muted) !important;
+  }
+  .dark .app-scope .bg-green-50 {
+    background-color: #0f2a1b !important;
+  }
+  .dark .app-scope .bg-red-50 {
+    background-color: #2a1212 !important;
+  }
+  .dark .app-scope .border-green-500 {
+    border-color: #22c55e !important;
+  }
+  .dark .app-scope .border-red-500 {
+    border-color: #ef4444 !important;
+  }
+  .dark .app-scope .text-green-600,
+  .dark .app-scope .text-green-700 {
+    color: #86efac !important;
+  }
+  .dark .app-scope .text-red-600,
+  .dark .app-scope .text-red-700 {
+    color: #fca5a5 !important;
+  }
+  .dark .app-scope .text-blue-800,
+  .dark .app-scope .text-blue-700 {
+    color: #93c5fd !important;
+  }
+  .dark .app-scope .border-blue-400 {
+    border-color: #60a5fa !important;
+  }
+  .dark .app-scope .border-gray-200,
+  .dark .app-scope .border-gray-100 {
+    border-color: var(--border-soft) !important;
+  }
+  .dark .app-scope .hover\:bg-gray-100:hover {
+    background-color: #1f2937 !important;
+  }
+  .dark .app-scope .hover\:bg-gray-200:hover,
+  .dark .app-scope .hover\:bg-gray-300:hover {
+    background-color: #334155 !important;
+  }
+  .dark .app-scope .hover\:bg-red-50:hover {
+    background-color: #3a1313 !important;
+  }
+  .dark .app-scope .shadow,
+  .dark .app-scope .shadow-md,
+  .dark .app-scope .shadow-lg,
+  .dark .app-scope .shadow-xl,
+  .dark .app-scope .shadow-2xl {
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.45) !important;
+  }
+}
+
+@layer components {
+  .ui-select {
+    width: 100%;
+    min-width: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 0.75rem;
+    border: 2px solid #e5e7eb;
+    background-color: #ffffff;
+    color: #111827;
+    padding: 0.5rem 2.5rem 0.5rem 1rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%2364748b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    cursor: pointer;
+  }
+
+  .ui-select:hover {
+    border-color: #a5b4fc;
+    background-color: #f8fafc;
+  }
+
+  .ui-select:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+  }
+
+  .ui-select option {
+    background: #ffffff;
+    color: #111827;
+  }
+
+  .ui-input {
+    width: 100%;
+    min-width: 0;
+    border-radius: 0.75rem;
+    border: 2px solid #e5e7eb;
+    background-color: #ffffff;
+    color: #111827;
+    padding: 0.6rem 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+
+  .ui-input:hover {
+    border-color: #a5b4fc;
+    background-color: #f8fafc;
+  }
+
+  .ui-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+  }
+
+  .dark .ui-input {
+    border-color: #334155;
+    background-color: #0f172a;
+    color: #e5e7eb;
+  }
+
+  .dark .ui-input:hover {
+    border-color: #818cf8;
+    background-color: #111827;
+  }
+
+  .dark .ui-input:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+  }
+
+  .dark .ui-select {
+    border-color: #334155;
+    background-color: #0f172a;
+    color: #e5e7eb;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%23cbd5e1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  .dark .ui-select:hover {
+    border-color: #818cf8;
+    background-color: #111827;
+  }
+
+  .dark .ui-select:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+  }
+
+  .dark .ui-select option {
+    background: #0f172a;
+    color: #e5e7eb;
+  }
+
+  .ui-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 8px;
+    border-radius: 9999px;
+    background: #c7d2fe;
+    outline: none;
+  }
+
+  .ui-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    border: 2px solid #ffffff;
+    background: #4f46e5;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+  }
+
+  .ui-range::-moz-range-track {
+    height: 8px;
+    border-radius: 9999px;
+    background: #c7d2fe;
+  }
+
+  .ui-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    border: 2px solid #ffffff;
+    background: #4f46e5;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+  }
+
+  .dark .ui-range {
+    background: #334155;
+  }
+
+  .dark .ui-range::-webkit-slider-thumb,
+  .dark .ui-range::-moz-range-thumb {
+    border-color: #0f172a;
+    background: #818cf8;
+  }
+
+  .dark .ui-range::-moz-range-track {
+    background: #334155;
+  }
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',

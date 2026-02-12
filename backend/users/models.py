@@ -1,47 +1,33 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-from datetime import timedelta
-from django.utils import timezone
-import secrets
+from .utils.constants import KNOWLEDGE_LEVEL_CHOICES as KNOWLEDGE_LEVEL_CHOICES_CONST
 
 
 class User(AbstractUser):
-    """Custom User model - logowanie przez email"""
     email = models.EmailField(unique=True)
 
-    # Usuń first_name i last_name - są w AbstractUser, ale nie używamy
     first_name = None
     last_name = None
 
-    # Email jako główne pole logowania
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username']  # username staje się opcjonalne
+    REQUIRED_FIELDS = ['username']
 
     def __str__(self):
         return self.email
 
 
 class UserProfile(models.Model):
-    """Profil użytkownika z dodatkowymi danymi"""
     ROLE_CHOICES = [
         ('user', 'User'),
         ('admin', 'Admin'),
     ]
 
-    KNOWLEDGE_LEVEL_CHOICES = [
-        ('elementary', 'Szkoła podstawowa'),
-        ('high_school', 'Liceum'),
-        ('university', 'Studia'),
-        ('expert', 'Ekspert'),
-    ]
+    KNOWLEDGE_LEVEL_CHOICES = KNOWLEDGE_LEVEL_CHOICES_CONST
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
 
-    # NOWE: Domyślny poziom wiedzy użytkownika
     default_knowledge_level = models.CharField(
         max_length=20,
         choices=KNOWLEDGE_LEVEL_CHOICES,
@@ -49,7 +35,6 @@ class UserProfile(models.Model):
         help_text='Domyślny poziom wiedzy używany przy tworzeniu quizów'
     )
 
-    # Statystyki
     total_quizzes_played = models.IntegerField(default=0)
     total_questions_answered = models.IntegerField(default=0)
     total_correct_answers = models.IntegerField(default=0)
@@ -68,24 +53,10 @@ class UserProfile(models.Model):
         return round((self.total_correct_answers / self.total_questions_answered) * 100, 1)
 
 
-@receiver(post_save, sender=User)
-def create_user_profile(sender, instance, created, **kwargs):
-    """Automatyczne tworzenie profilu po utworzeniu użytkownika"""
-    if created:
-        UserProfile.objects.create(user=instance)
-
-
-@receiver(post_save, sender=User)
-def save_user_profile(sender, instance, **kwargs):
-    """Automatyczne zapisywanie profilu"""
-    if hasattr(instance, 'profile'):
-        instance.profile.save()
-
 
 class PasswordResetToken(models.Model):
-    """Token do resetowania hasła"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_tokens')
-    code = models.CharField(max_length=6)  # 6-cyfrowy kod
+    code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
     used = models.BooleanField(default=False)
 
@@ -95,7 +66,6 @@ class PasswordResetToken(models.Model):
         ordering = ['-created_at']
 
     def is_valid(self):
-        """Sprawdź czy token jest ważny (nie starszy niż 1h i nieużyty)"""
         from django.conf import settings
         from datetime import timedelta
         from django.utils import timezone
@@ -105,7 +75,6 @@ class PasswordResetToken(models.Model):
 
     @staticmethod
     def generate_code():
-        """Generuj 6-cyfrowy kod"""
         import secrets
         return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
 

@@ -1,43 +1,47 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   adminGetQuestions,
   adminGetQuestionDetail,
   adminUpdateQuestion,
-  adminDeleteQuestion,
-  adminGetQuestionStats
+  adminDeleteQuestion
 } from '../../services/api';
+import {
+  getDifficultyBadgeClass,
+  getDifficultyBadgeLabel,
+  getKnowledgeBadgeClass,
+  getKnowledgeBadgeLabel,
+  formatDate
+} from '../../services/helpers';
 import LatexRenderer from '../../components/LatexRenderer';
+import PaginationBar from '../../components/PaginationBar';
+import QuestionsFilters from './questions/QuestionsFilters';
+import QuestionEditModal from './questions/QuestionEditModal';
 
 export default function QuestionsManager() {
   const [questions, setQuestions] = useState([]);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Paginacja i filtrowanie
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTopic, setFilterTopic] = useState('');
   const [filterDifficulty, setFilterDifficulty] = useState('');
   const [filterKnowledge, setFilterKnowledge] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Edycja
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [editFormData, setEditFormData] = useState({});
 
-  useEffect(() => {
-    loadQuestions();
-    loadStats();
-  }, [currentPage, searchQuery, filterTopic, filterDifficulty, filterKnowledge]);
-
-  const loadQuestions = async () => {
+  const loadQuestions = useCallback(async () => {
     try {
       setLoading(true);
       const params = {
         page: currentPage,
-        page_size: 20,
+        page_size: pageSize,
         ...(searchQuery && { search: searchQuery }),
         ...(filterTopic && { topic: filterTopic }),
         ...(filterDifficulty && { difficulty: filterDifficulty }),
@@ -45,24 +49,21 @@ export default function QuestionsManager() {
       };
 
       const data = await adminGetQuestions(params);
-      setQuestions(data.questions);
-      setTotalPages(data.pagination.total_pages);
+      setQuestions(Array.isArray(data?.questions) ? data.questions : []);
+      setTotalPages(Number(data?.pagination?.total_pages || 1));
+      setTotalCount(Number(data?.pagination?.total_count || data?.questions?.length || 0));
     } catch (err) {
       console.error('Error loading questions:', err);
       setError('Nie udało się załadować pytań.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, pageSize, searchQuery, filterTopic, filterDifficulty, filterKnowledge]);
 
-  const loadStats = async () => {
-    try {
-      const data = await adminGetQuestionStats();
-      setStats(data);
-    } catch (err) {
-      console.error('Error loading stats:', err);
-    }
-  };
+  useEffect(() => {
+    loadQuestions();
+  }, [loadQuestions]);
+
 
   const handleEdit = async (question) => {
     try {
@@ -102,6 +103,28 @@ export default function QuestionsManager() {
     }
   };
 
+  const totalPagesSafe = Math.max(1, totalPages);
+  const hasPrev = currentPage > 1;
+  const hasNext = currentPage < totalPagesSafe;
+
+  const toggleDifficulty = (value) => {
+    setFilterDifficulty((prev) => (prev === value ? '' : value));
+    setCurrentPage(1);
+  };
+
+  const toggleKnowledge = (value) => {
+    setFilterKnowledge((prev) => (prev === value ? '' : value));
+    setCurrentPage(1);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setFilterTopic('');
+    setFilterDifficulty('');
+    setFilterKnowledge('');
+    setCurrentPage(1);
+  };
+
   const handleDelete = async (questionId) => {
     if (!window.confirm('Czy na pewno chcesz usunąć to pytanie?')) return;
 
@@ -110,7 +133,6 @@ export default function QuestionsManager() {
       await adminDeleteQuestion(questionId);
       setSuccess('🗑️ Pytanie zostało usunięte!');
       loadQuestions();
-      loadStats();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Error deleting question:', err);
@@ -122,351 +144,173 @@ export default function QuestionsManager() {
 
   return (
     <div className="space-y-6">
-      {/* Nagłówek i statystyki */}
-      <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-          📚 Zarządzanie pytaniami
-        </h2>
-
-        {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <div className="text-3xl font-bold text-blue-600">{stats.total_questions}</div>
-              <div className="text-sm text-blue-800">Wszystkich pytań</div>
-            </div>
-            {stats.by_difficulty && stats.by_difficulty.map((item) => (
-              <div key={item.difficulty_level} className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                <div className="text-3xl font-bold text-purple-600">{item.count}</div>
-                <div className="text-sm text-purple-800">Poziom: {item.difficulty_level}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Komunikaty */}
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl">
+        <div className="bg-red-100 dark:bg-red-900/40 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded-xl">
           {error}
         </div>
       )}
       {success && (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-xl">
+        <div className="bg-green-100 dark:bg-green-900/40 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-200 px-4 py-3 rounded-xl">
           {success}
         </div>
       )}
 
-      {/* Filtry i wyszukiwanie */}
-      <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">🔍 Filtruj i wyszukaj</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <input
-            type="text"
-            placeholder="Szukaj w treści pytania..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-          />
-          <input
-            type="text"
-            placeholder="Filtruj po temacie..."
-            value={filterTopic}
-            onChange={(e) => {
-              setFilterTopic(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-          />
-          <select
-            value={filterDifficulty}
-            onChange={(e) => {
-              setFilterDifficulty(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 bg-white"
-          >
-            <option value="">Wszystkie trudności</option>
-            <option value="łatwy">Łatwy</option>
-            <option value="średni">Średni</option>
-            <option value="trudny">Trudny</option>
-          </select>
-          <select
-            value={filterKnowledge}
-            onChange={(e) => {
-              setFilterKnowledge(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 bg-white"
-          >
-            <option value="">Wszystkie poziomy</option>
-            <option value="elementary">Podstawówka</option>
-            <option value="high_school">Liceum</option>
-            <option value="university">Studia</option>
-            <option value="expert">Ekspert</option>
-          </select>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setFilterTopic('');
-              setFilterDifficulty('');
-              setFilterKnowledge('');
-              setCurrentPage(1);
-            }}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
-          >
-            Wyczyść filtry
-          </button>
-        </div>
-      </div>
+      <QuestionsFilters
+        filtersOpen={filtersOpen}
+        setFiltersOpen={setFiltersOpen}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        filterTopic={filterTopic}
+        setFilterTopic={setFilterTopic}
+        setCurrentPage={setCurrentPage}
+        filterDifficulty={filterDifficulty}
+        toggleDifficulty={toggleDifficulty}
+        filterKnowledge={filterKnowledge}
+        toggleKnowledge={toggleKnowledge}
+        clearFilters={clearFilters}
+      />
 
-      {/* Lista pytań */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Ładowanie pytań...</p>
-          </div>
-        ) : questions.length === 0 ? (
-          <div className="p-12 text-center text-gray-500">
-            Nie znaleziono pytań spełniających kryteria.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b-2 border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pytanie</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Temat</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Trudność</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Poziom</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Statystyki</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Akcje</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {questions.map((question) => (
-                  <tr key={question.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-700">{question.id}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 max-w-md">
-                      <div className="line-clamp-2">
-                        <LatexRenderer text={question.question_text} inline={true} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      <div className="font-semibold">{question.topic}</div>
-                      {question.subtopic && (
-                        <div className="text-xs text-gray-500">{question.subtopic}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        question.difficulty_level === 'łatwy' ? 'bg-green-100 text-green-700' :
-                        question.difficulty_level === 'średni' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {question.difficulty_level}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-gray-100 dark:border-slate-800 p-4 sm:p-6">
+        <div className="mb-4 text-gray-700 dark:text-slate-200 font-medium">
+          Znaleziono: <span className="text-indigo-600 font-bold">{totalCount}</span> pytań
+        </div>
+
+        <div className="space-y-4">
+          {loading && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-md p-12 text-center text-gray-600 dark:text-slate-200">
+              Ładowanie…
+            </div>
+          )}
+
+          {!loading && questions.length === 0 && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-md p-12 text-center text-gray-500 dark:text-slate-300">
+              Nie znaleziono pytań spełniających kryteria.
+            </div>
+          )}
+
+          {!loading &&
+            questions.map((question) => {
+              const totalAnswers = Number(question.total_answers || 0);
+              const correctAnswers = Number(question.correct_answers_count || 0);
+              const wrongAnswers = Math.max(0, totalAnswers - correctAnswers);
+              const timesUsed = Number(question.times_used || 0);
+
+              return (
+              <div
+                key={question.id}
+                className="group p-6 border-2 border-gray-100 dark:border-slate-800 rounded-xl hover:border-indigo-300 hover:shadow-lg transition-all bg-gradient-to-r from-white to-gray-50 dark:from-slate-900 dark:to-slate-800"
+              >
+                <div className="flex flex-col md:flex-row md:items-center gap-6">
+                  <div className="flex-1">
+                    <div className="mb-3">
+                      <LatexRenderer
+                        text={question.question_text}
+                        className="text-lg font-bold text-gray-800 dark:text-slate-100 group-hover:text-indigo-600 transition-colors inline"
+                        inline={true}
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 mb-4">
+                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getDifficultyBadgeClass(
+                        question.difficulty_level
+                      )}`}>
+                        {getDifficultyBadgeLabel(question.difficulty_level)}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {question.knowledge_level === 'elementary' && '🎒 Podstawówka'}
-                      {question.knowledge_level === 'high_school' && '🎓 Liceum'}
-                      {question.knowledge_level === 'university' && '🏛️ Studia'}
-                      {question.knowledge_level === 'expert' && '🔬 Ekspert'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      <div>{question.total_answers} odpowiedzi</div>
-                      <div className="text-xs text-gray-500">
-                        {question.success_rate}% poprawnych
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEdit(question)}
-                          className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold text-xs"
-                        >
-                          ✏️ Edytuj
-                        </button>
-                        <button
-                          onClick={() => handleDelete(question.id)}
-                          className="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold text-xs"
-                        >
-                          🗑️ Usuń
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
 
-        {/* Paginacja */}
-        {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-2 p-4 border-t border-gray-200">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 font-semibold"
-            >
-              ← Poprzednia
-            </button>
-            <span className="text-gray-600">
-              Strona {currentPage} z {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 font-semibold"
-            >
-              Następna →
-            </button>
-          </div>
+                      {question.knowledge_level && (
+                        <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getKnowledgeBadgeClass(
+                          question.knowledge_level
+                        )}`}>
+                          {getKnowledgeBadgeLabel(question.knowledge_level)}
+                        </span>
+                      )}
+
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200 rounded-full text-sm font-semibold">
+                        {question.topic || '-'}
+                      </span>
+
+                      {question.subtopic && (
+                        <span className="px-3 py-1 bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200 rounded-full text-sm font-medium">
+                          {question.subtopic}
+                        </span>
+                      )}
+
+                      {question.created_at && (
+                        <span className="px-3 py-1 bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200 rounded-full text-sm font-medium">
+                          Utworzone: {formatDate(question.created_at)}
+                        </span>
+                      )}
+
+                      {question.edited_at && (
+                        <span className="px-3 py-1 bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200 rounded-full text-sm font-medium">
+                          Modyfikacja: {formatDate(question.edited_at)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200">
+                        Odpowiedzi: {totalAnswers}
+                      </span>
+                      <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200">
+                        Poprawne: {correctAnswers}
+                      </span>
+                      <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200">
+                        Niepoprawne: {wrongAnswers}
+                      </span>
+                      <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                        Użycia: {timesUsed}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="w-full md:w-[150px] lg:w-auto flex flex-col gap-2 md:self-center md:ml-auto lg:flex-row lg:flex-nowrap lg:justify-end">
+                    <button
+                      onClick={() => handleEdit(question)}
+                      className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 min-h-[42px] w-full lg:w-[150px]"
+                    >
+                      ✏️ Edytuj
+                    </button>
+                    <button
+                      onClick={() => handleDelete(question.id)}
+                      className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 min-h-[42px] w-full lg:w-[150px]"
+                    >
+                      🗑️ Usuń
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+            })}
+        </div>
+
+        {totalCount > 0 && (
+          <PaginationBar
+            page={currentPage}
+            totalPages={totalPagesSafe}
+            hasPrev={hasPrev}
+            hasNext={hasNext}
+            loading={loading}
+            onPrev={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            onNext={() => setCurrentPage((p) => Math.min(totalPagesSafe, p + 1))}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+          />
         )}
       </div>
 
-      {/* Modal edycji */}
-      {editingQuestion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-8">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">✏️ Edytuj pytanie #{editingQuestion.id}</h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Treść pytania</label>
-                <textarea
-                  value={editFormData.question_text}
-                  onChange={(e) => setEditFormData({ ...editFormData, question_text: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-                  rows="3"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Poprawna odpowiedź</label>
-                <input
-                  type="text"
-                  value={editFormData.correct_answer}
-                  onChange={(e) => setEditFormData({ ...editFormData, correct_answer: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Błędna odpowiedź 1</label>
-                <input
-                  type="text"
-                  value={editFormData.wrong_answer_1}
-                  onChange={(e) => setEditFormData({ ...editFormData, wrong_answer_1: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Błędna odpowiedź 2</label>
-                <input
-                  type="text"
-                  value={editFormData.wrong_answer_2}
-                  onChange={(e) => setEditFormData({ ...editFormData, wrong_answer_2: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Błędna odpowiedź 3</label>
-                <input
-                  type="text"
-                  value={editFormData.wrong_answer_3}
-                  onChange={(e) => setEditFormData({ ...editFormData, wrong_answer_3: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Wyjaśnienie</label>
-                <textarea
-                  value={editFormData.explanation}
-                  onChange={(e) => setEditFormData({ ...editFormData, explanation: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-                  rows="3"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Temat</label>
-                  <input
-                    type="text"
-                    value={editFormData.topic}
-                    onChange={(e) => setEditFormData({ ...editFormData, topic: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Podtemat (opcjonalnie)</label>
-                  <input
-                    type="text"
-                    value={editFormData.subtopic}
-                    onChange={(e) => setEditFormData({ ...editFormData, subtopic: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Poziom trudności</label>
-                  <select
-                    value={editFormData.difficulty_level}
-                    onChange={(e) => setEditFormData({ ...editFormData, difficulty_level: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 bg-white"
-                  >
-                    <option value="łatwy">Łatwy</option>
-                    <option value="średni">Średni</option>
-                    <option value="trudny">Trudny</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Poziom wiedzy</label>
-                  <select
-                    value={editFormData.knowledge_level}
-                    onChange={(e) => setEditFormData({ ...editFormData, knowledge_level: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 bg-white"
-                  >
-                    <option value="elementary">Podstawówka</option>
-                    <option value="high_school">Liceum</option>
-                    <option value="university">Studia</option>
-                    <option value="expert">Ekspert</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-4 mt-6">
-              <button
-                onClick={() => setEditingQuestion(null)}
-                className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={loading}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 font-semibold disabled:opacity-50"
-              >
-                {loading ? 'Zapisywanie...' : '💾 Zapisz zmiany'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <QuestionEditModal
+        editingQuestion={editingQuestion}
+        setEditingQuestion={setEditingQuestion}
+        editFormData={editFormData}
+        setEditFormData={setEditFormData}
+        loading={loading}
+        handleSaveEdit={handleSaveEdit}
+      />
     </div>
   );
 }
+
