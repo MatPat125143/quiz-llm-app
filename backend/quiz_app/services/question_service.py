@@ -145,8 +145,6 @@ class QuestionService:
                 logger.debug(
                     f"Exact match found: question {question.id}, used {question.times_used}x"
                 )
-                question.times_used += 1
-                question.save(update_fields=['times_used'])
                 return question, False
             except Question.DoesNotExist:
                 pass
@@ -163,8 +161,6 @@ class QuestionService:
 
             if similar_question:
                 logger.info(f"Reusing similar question {similar_question.id}")
-                similar_question.times_used += 1
-                similar_question.save(update_fields=['times_used'])
                 return similar_question, False
 
             question = Question.objects.create(

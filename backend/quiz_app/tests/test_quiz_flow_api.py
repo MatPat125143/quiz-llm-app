@@ -148,6 +148,7 @@ class QuizFlowApiTests(APITestCase):
         self.assertEqual(session.current_streak, 1)
         self.assertEqual(question.total_answers, 1)
         self.assertEqual(question.correct_answers_count, 1)
+        self.assertEqual(question.times_used, 1)
 
     @patch('quiz_app.views.answer_view.handle_adaptive_difficulty_change', return_value=(False, None, None))
     def test_submit_answer_timeout_sets_was_timeout(self, _mock_handle_difficulty):
@@ -207,8 +208,10 @@ class QuizFlowApiTests(APITestCase):
         self.assertEqual(second.status_code, status.HTTP_200_OK)
 
         session.refresh_from_db()
+        question.refresh_from_db()
         self.assertEqual(session.total_questions, 1)
         self.assertEqual(session.correct_answers, 1)
+        self.assertEqual(question.times_used, 1)
 
     @patch('quiz_app.views.quiz_view.rollback_session')
     def test_end_quiz_deletes_incomplete_session(self, mock_rollback):

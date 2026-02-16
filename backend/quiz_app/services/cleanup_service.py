@@ -105,7 +105,8 @@ def rollback_session(session):
             question.correct_answers_count = max(
                 0, question.correct_answers_count - 1
             )
-        question.save(update_fields=['total_answers', 'correct_answers_count'])
+        question.times_used = question.total_answers
+        question.save(update_fields=['total_answers', 'correct_answers_count', 'times_used'])
 
     Answer.objects.filter(session=session).delete()
 

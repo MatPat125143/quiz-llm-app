@@ -66,7 +66,8 @@ class Command(BaseCommand):
                 q.total_answers = max(0, q.total_answers - 1)
             if ans.is_correct and q.correct_answers_count > 0:
                 q.correct_answers_count = max(0, q.correct_answers_count - 1)
-            q.save(update_fields=["total_answers", "correct_answers_count"])
+            q.times_used = q.total_answers
+            q.save(update_fields=["total_answers", "correct_answers_count", "times_used"])
 
         Answer.objects.filter(id__in=[a.id for a in answers]).delete()
         return total_answers_delta, total_correct_delta

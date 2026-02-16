@@ -127,7 +127,8 @@ class Question(models.Model):
         self.total_answers += 1
         if is_correct:
             self.correct_answers_count += 1
-        self.save(update_fields=['total_answers', 'correct_answers_count'])
+        self.times_used = self.total_answers
+        self.save(update_fields=['total_answers', 'correct_answers_count', 'times_used'])
 
     @staticmethod
     def build_content_hash(
