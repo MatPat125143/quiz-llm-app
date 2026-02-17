@@ -33,10 +33,12 @@ class AdaptiveDifficultyServiceTests(TestCase):
             difficulty_level=difficulty
         )
 
+    @patch('quiz_app.services.answer_service.QuizCacheService.clear_session_cache')
     @patch('quiz_app.services.answer_service._schedule_level_generation')
     def test_handle_adaptive_difficulty_change_updates_level_and_cleans_old_questions(
         self,
-        mock_schedule_generation
+        mock_schedule_generation,
+        mock_clear_session_cache
     ):
         session = QuizSession.objects.create(
             user=self.user,
@@ -87,6 +89,7 @@ class AdaptiveDifficultyServiceTests(TestCase):
         self.assertEqual(new_level, 'średni')
         self.assertEqual(session.current_difficulty, 5.0)
         self.assertFalse(Question.objects.filter(id=old_unused_q.id).exists())
+        mock_clear_session_cache.assert_called_once_with(session.id)
         mock_schedule_generation.assert_called_once()
 
     def test_handle_adaptive_difficulty_change_is_noop_when_feature_disabled(self):

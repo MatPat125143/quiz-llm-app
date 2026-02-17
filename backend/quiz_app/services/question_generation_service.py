@@ -1,6 +1,7 @@
 from llm_integration.question_generator import QuestionGenerator
 from llm_integration.difficulty_adapter import DifficultyAdapter
 
+from ..models import QuizSessionQuestion
 from ..utils.constants import GENERATION_BUFFER_MIN_EXTRA, GENERATION_BUFFER_RATIO
 from ..utils.helpers import get_used_hashes
 from .question_service import QuestionService

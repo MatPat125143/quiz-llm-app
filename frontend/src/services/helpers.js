@@ -114,18 +114,29 @@ export const formatQuizDuration = (
     startedAt,
     endedAt,
     totalQuestions = 0,
-    timePerQuestion = 0
+    timePerQuestion = 0,
+    totalResponseTime = null
 ) => {
     let totalSeconds = 0;
+    const hasResponseTotal = totalResponseTime !== null && totalResponseTime !== undefined;
 
-    if (startedAt && endedAt) {
-        const start = new Date(startedAt);
-        const end = new Date(endedAt);
-        if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
-            totalSeconds = Math.max(0, Math.floor((end - start) / 1000));
+    if (hasResponseTotal) {
+        const parsed = Number(totalResponseTime);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+            totalSeconds = Math.round(parsed);
         }
-    } else if (totalQuestions && timePerQuestion) {
-        totalSeconds = Math.max(0, Math.floor(Number(totalQuestions) * Number(timePerQuestion)));
+    }
+
+    if (!hasResponseTotal) {
+        if (startedAt && endedAt) {
+            const start = new Date(startedAt);
+            const end = new Date(endedAt);
+            if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+                totalSeconds = Math.max(0, Math.floor((end - start) / 1000));
+            }
+        } else if (totalQuestions && timePerQuestion) {
+            totalSeconds = Math.max(0, Math.floor(Number(totalQuestions) * Number(timePerQuestion)));
+        }
     }
 
     const minutes = Math.floor(totalSeconds / 60);

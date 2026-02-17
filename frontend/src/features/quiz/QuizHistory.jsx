@@ -31,7 +31,7 @@ export default function QuizHistory() {
     difficulty: '',
     knowledgeLevel: '',
     sortBy: 'date_desc',
-    is_custom: '',
+    isAdaptive: '',
   });
 
   const navigate = useNavigate();
@@ -71,9 +71,9 @@ export default function QuizHistory() {
       filtered = filtered.filter((q) => q.knowledge_level === filters.knowledgeLevel);
     }
 
-    if (filters.is_custom) {
-      const isCustomValue = filters.is_custom === 'true';
-      filtered = filtered.filter((q) => Boolean(q.is_custom) === isCustomValue);
+    if (filters.isAdaptive) {
+      const adaptiveValue = filters.isAdaptive === 'true';
+      filtered = filtered.filter((q) => Boolean(q.use_adaptive_difficulty) === adaptiveValue);
     }
 
     switch (filters.sortBy) {
@@ -109,7 +109,7 @@ export default function QuizHistory() {
       difficulty: '',
       knowledgeLevel: '',
       sortBy: 'date_desc',
-      is_custom: '',
+      isAdaptive: '',
     });
     setPage(1);
   };
@@ -152,13 +152,13 @@ export default function QuizHistory() {
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Rodzaj quizu</label>
               <select
-                value={filters.is_custom}
-                onChange={(e) => handleFilterChange('is_custom', e.target.value)}
+                value={filters.isAdaptive}
+                onChange={(e) => handleFilterChange('isAdaptive', e.target.value)}
                 className="ui-select"
               >
                 <option value="">Wszystkie</option>
-                <option value="false">Adaptacyjne</option>
-                <option value="true">Standardowe</option>
+                <option value="true">Adaptacyjne</option>
+                <option value="false">Standardowe</option>
               </select>
             </div>
 
@@ -346,7 +346,13 @@ export default function QuizHistory() {
                             <div>
                               <p className="text-xs text-gray-500 dark:text-slate-400">Czas</p>
                               <p className="text-sm font-medium text-gray-700 dark:text-slate-200">
-                                {formatQuizDuration(quiz.started_at, quiz.ended_at)}
+                                {formatQuizDuration(
+                                  quiz.started_at,
+                                  quiz.ended_at,
+                                  quiz.total_questions,
+                                  quiz.time_per_question,
+                                  quiz.total_response_time
+                                )}
                               </p>
                             </div>
                           </div>

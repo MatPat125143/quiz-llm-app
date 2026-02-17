@@ -248,7 +248,8 @@ export default function UserDashboard() {
                                   quiz?.started_at,
                                   quiz?.ended_at || quiz?.completed_at,
                                   quiz?.total_questions,
-                                  quiz?.time_per_question
+                                  quiz?.time_per_question,
+                                  quiz?.total_response_time
                                 )}
                               </p>
                             </div>

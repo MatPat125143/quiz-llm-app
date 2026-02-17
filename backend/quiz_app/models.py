@@ -132,12 +132,12 @@ class Question(models.Model):
 
     @staticmethod
     def build_content_hash(
-        question_text,
-        correct_answer,
-        topic,
-        subtopic=None,
-        knowledge_level=None,
-        difficulty_level=None,
+            question_text,
+            correct_answer,
+            topic,
+            subtopic=None,
+            knowledge_level=None,
+            difficulty_level=None,
     ):
         content = (
             f"{question_text}{correct_answer}{topic}"

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db.models import Sum
 from ..models import QuizSession
 from ..utils.constants import (
     DEFAULT_QUESTIONS_COUNT,
@@ -17,6 +18,7 @@ class QuizSessionSerializer(serializers.ModelSerializer):
     completed_at = serializers.DateTimeField(source='ended_at', read_only=True)
     is_custom = serializers.SerializerMethodField()
     initial_difficulty_value = serializers.SerializerMethodField()
+    total_response_time = serializers.SerializerMethodField()
 
     def get_is_custom(self, obj):
         return (obj.questions_count != DEFAULT_QUESTIONS_COUNT or
@@ -34,6 +36,17 @@ class QuizSessionSerializer(serializers.ModelSerializer):
         normalized = DIFFICULTY_ALIAS_MAP.get(name, name)
         return DIFFICULTY_VALUE_MAP.get(normalized, None)
 
+    def get_total_response_time(self, obj):
+        annotated = getattr(obj, 'total_response_time', None)
+        if annotated is not None:
+            try:
+                return round(float(annotated), 2)
+            except (TypeError, ValueError):
+                return 0.0
+
+        value = obj.answers.aggregate(total=Sum('response_time')).get('total') or 0.0
+        return round(float(value), 2)
+
     class Meta:
         model = QuizSession
         fields = [
@@ -42,7 +55,6 @@ class QuizSessionSerializer(serializers.ModelSerializer):
             'initial_difficulty_value',
             'started_at', 'ended_at', 'completed_at', 'is_completed',
             'total_questions', 'correct_answers', 'score',
-            'current_streak', 'accuracy', 'questions_count',
+            'current_streak', 'accuracy', 'total_response_time', 'questions_count',
             'time_per_question', 'use_adaptive_difficulty', 'is_custom'
         ]
-

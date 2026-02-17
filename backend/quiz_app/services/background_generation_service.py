@@ -132,6 +132,8 @@ class BackgroundGenerationService:
             batch_size = min(BACKGROUND_BATCH_SIZE, count)
             total_generated = 0
             order = start_order
+            failed_batches = 0
+            max_failed_batches = 3
 
             while total_generated < count:
 
@@ -153,12 +155,30 @@ class BackgroundGenerationService:
                     f"(target: {current_batch}, progress: {total_generated}/{count})"
                 )
 
-                questions_data = self.core.generate_questions_data(
-                    session=session,
-                    difficulty_text=difficulty_text,
-                    count=buffer_batch,
-                    existing_questions=existing_questions_list,
-                )
+                try:
+                    questions_data = self.core.generate_questions_data(
+                        session=session,
+                        difficulty_text=difficulty_text,
+                        count=buffer_batch,
+                        existing_questions=existing_questions_list,
+                    )
+                    failed_batches = 0
+                except (ValueError, RuntimeError, TypeError, KeyError) as e:
+                    failed_batches += 1
+                    logger.warning(
+                        "Background: Failed batch generation %s/%s for session %s: %s",
+                        failed_batches,
+                        max_failed_batches,
+                        session_id,
+                        e,
+                    )
+                    if failed_batches >= max_failed_batches:
+                        logger.error(
+                            "Background: Stopping generation after %s consecutive batch failures",
+                            failed_batches,
+                        )
+                        break
+                    continue
 
                 batch_added = 0
                 for q_data in questions_data:

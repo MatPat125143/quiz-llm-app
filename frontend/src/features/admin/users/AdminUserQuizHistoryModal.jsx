@@ -314,7 +314,13 @@ export default function AdminUserQuizHistoryModal({
                                 <div>
                                   <p className="text-xs text-gray-500 dark:text-slate-400">Czas</p>
                                   <p className="text-sm font-medium text-gray-700 dark:text-slate-200">
-                                    {formatQuizDuration(quiz.started_at, quiz.ended_at)}
+                                    {formatQuizDuration(
+                                      quiz.started_at,
+                                      quiz.ended_at,
+                                      quiz.total_questions,
+                                      0,
+                                      quiz.total_response_time
+                                    )}
                                   </p>
                                 </div>
                               </div>

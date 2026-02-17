@@ -9,6 +9,10 @@ def build_quiz_details_payload(session, request_user):
     ).select_related('question').order_by('answered_at')
 
     answers_data = AnswerDetailSerializer(answers, many=True).data
+    total_response_time = round(
+        sum((ans.response_time or 0) for ans in answers),
+        2
+    )
 
     difficulty_progress = []
     if session.use_adaptive_difficulty:
@@ -39,6 +43,7 @@ def build_quiz_details_payload(session, request_user):
             'total_questions': session.total_questions,
             'correct_answers': session.correct_answers,
             'accuracy': session.accuracy,
+            'total_response_time': total_response_time,
             'started_at': session.started_at,
             'ended_at': session.ended_at,
             'completed_at': session.ended_at,

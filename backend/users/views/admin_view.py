@@ -2,7 +2,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import FloatField, Q, Sum, Value
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 
 from ..permissions import IsAdminUser
@@ -94,7 +95,17 @@ def search_users(request):
 @permission_classes([IsAdminUser])
 def user_quiz_history(request, user_id):
     user = get_object_or_404(User, id=user_id)
-    sessions = QuizSession.objects.filter(user=user, is_completed=True).order_by('-ended_at')
+    sessions = (
+        QuizSession.objects.filter(user=user, is_completed=True)
+        .annotate(
+            total_response_time=Coalesce(
+                Sum('answers__response_time'),
+                Value(0.0),
+                output_field=FloatField()
+            )
+        )
+        .order_by('-ended_at')
+    )
 
     if not sessions.exists():
         return Response([], status=status.HTTP_200_OK)
@@ -110,6 +121,7 @@ def user_quiz_history(request, user_id):
             "accuracy": s.accuracy,
             "correct_answers": s.correct_answers,
             "total_questions": s.total_questions,
+            "total_response_time": round(float(getattr(s, 'total_response_time', 0.0) or 0.0), 2),
             "started_at": s.started_at,
             "ended_at": s.ended_at,
         }

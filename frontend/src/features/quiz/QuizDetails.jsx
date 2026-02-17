@@ -212,7 +212,8 @@ export default function QuizDetails() {
         session.started_at,
         session.ended_at || session.completed_at,
         session.total_questions,
-        session.time_per_question
+        session.time_per_question,
+        session.total_response_time
     );
 
     const averageResponseTime = quiz.answers && quiz.answers.length > 0

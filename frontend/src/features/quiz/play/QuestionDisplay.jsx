@@ -71,7 +71,6 @@ export default function QuestionDisplay() {
   const [submitting, setSubmitting] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30);
   const [timerActive, setTimerActive] = useState(false);
-  const [startTime, setStartTime] = useState(null);
   const [error, setError] = useState('');
 
   const [toastQueue, setToastQueue] = useState([]);
@@ -80,6 +79,9 @@ export default function QuestionDisplay() {
   const toastContextRef = useRef('');
   const loadUserAndQuestionRef = useRef(null);
   const autoSubmitRef = useRef(null);
+  const deadlineRef = useRef(null);
+  const startTimeRef = useRef(null);
+  const timeoutTriggeredRef = useRef(new Set());
 
   const showToast = useCallback((message, icon, type = 'success', duration = 2200) => {
     const priority = TOAST_PRIORITY[type] || 1;
@@ -119,8 +121,6 @@ export default function QuestionDisplay() {
 
   const handleToastDone = () => setActiveToast(null);
 
-  
-  const [previousDifficulty, setPreviousDifficulty] = useState(null);
   const [, setLastStreak] = useState(0);
   const [milestoneShown, setMilestoneShown] = useState(new Set());
   const [currentStreak, setCurrentStreak] = useState(0);
@@ -180,19 +180,27 @@ export default function QuestionDisplay() {
   }, [sessionId, location.state?.startParams, navigate]);
 
   useEffect(() => {
-    if (!timerActive || timeLeft <= 0) return;
+    if (!timerActive || !question?.question_id) return;
+
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          setTimerActive(false);
+      const deadline = deadlineRef.current;
+      if (!Number.isFinite(deadline)) return;
+
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        setTimerActive(false);
+        const qid = question.question_id;
+        if (!timeoutTriggeredRef.current.has(qid)) {
+          timeoutTriggeredRef.current.add(qid);
           autoSubmitRef.current?.();
-          return 0;
         }
-        return prev - 1;
-      });
-    }, 1000);
+      }
+    }, 250);
+
     return () => clearInterval(timer);
-  }, [timerActive, timeLeft]);
+  }, [timerActive, question?.question_id]);
 
   const getMilestones = (totalQuestions) => {
     if (totalQuestions <= 5) return [3, 5];
@@ -201,31 +209,6 @@ export default function QuestionDisplay() {
     return [7, 14, 20];
   };
 
-  
-  useEffect(() => {
-    if (question && previousDifficulty && question.difficulty_label !== previousDifficulty) {
-      const current = (question.difficulty_label || '').toLowerCase();
-      const prev = previousDifficulty.toLowerCase();
-
-      const difficultyOrder = {
-        'łatwy': 1, latwy: 1, easy: 1,
-        'średni': 2, sredni: 2, medium: 2,
-        trudny: 3, hard: 3
-      };
-
-      const currentLevel = difficultyOrder[current] || 2;
-      const prevLevel = difficultyOrder[prev] || 2;
-
-      if (currentLevel > prevLevel) {
-        showToast('Poziom trudności wzrósł!', '⬆️', 'levelUp', 2000);
-      } else if (currentLevel < prevLevel) {
-        showToast('Poziom trudności zmalał', '⬇️', 'levelUp', 2000);
-      }
-    }
-    
-  }, [question, previousDifficulty, showToast]);
-
-  
   useEffect(() => {
     if (result && result.current_streak !== undefined && result.is_correct) {
       const newStreak = result.current_streak;
@@ -258,10 +241,7 @@ export default function QuestionDisplay() {
       toastContextRef.current = `q:${questionData.question_id || Date.now()}`;
       setToastQueue([]);
       setActiveToast(null);
-      setQuestion((prevQuestion) => {
-        if (prevQuestion) setPreviousDifficulty(prevQuestion.difficulty_label);
-        return questionData;
-      });
+      setQuestion(questionData);
       setAnswered(false);
       setSelectedAnswer(null);
       setResult(null);
@@ -272,13 +252,17 @@ export default function QuestionDisplay() {
       const now = Date.now();
       const deadline = Number.isFinite(stored) ? stored : now + durationMs;
       localStorage.setItem(key, deadline);
+      deadlineRef.current = deadline;
+      startTimeRef.current = deadline - durationMs;
 
       const remainingSeconds = Math.max(0, Math.ceil((deadline - now) / 1000));
       setTimeLeft(remainingSeconds);
-      setStartTime(deadline - durationMs);
       setTimerActive(remainingSeconds > 0);
 
-      if (remainingSeconds <= 0) setTimeout(() => autoSubmitRef.current?.(), 0);
+      if (remainingSeconds <= 0 && !timeoutTriggeredRef.current.has(questionData.question_id)) {
+        timeoutTriggeredRef.current.add(questionData.question_id);
+        setTimeout(() => autoSubmitRef.current?.(), 0);
+      }
     } catch (err) {
       console.error('Error loading question:', err);
       if (err.response?.status === 404) {
@@ -337,13 +321,36 @@ export default function QuestionDisplay() {
     setTimerActive(false);
     setAnswered(true);
 
-    const actualResponseTime = Math.floor((Date.now() - startTime) / 1000);
-    const responseTime = Math.min(actualResponseTime, question.time_per_question);
+    const now = Date.now();
+    const baseStart = Number.isFinite(startTimeRef.current) ? startTimeRef.current : now;
+    const actualResponseTime = Math.max(0, Math.floor((now - baseStart) / 1000));
+    const maxTime = Number(question.time_per_question) || 30;
+    const responseTime = Math.min(actualResponseTime, maxTime);
 
     try {
       const response = await submitAnswer(question.question_id, answer || '', responseTime);
       localStorage.removeItem(getDeadlineKey(sessionId, question.question_id));
       setResult(response);
+
+      if (response?.difficulty_changed) {
+        const difficultyOrder = {
+          'łatwy': 1, latwy: 1, easy: 1,
+          'średni': 2, sredni: 2, medium: 2,
+          trudny: 3, hard: 3
+        };
+        const prev = String(response.previous_difficulty || '').toLowerCase();
+        const next = String(response.new_difficulty || '').toLowerCase();
+        const prevLevel = difficultyOrder[prev] || 2;
+        const nextLevel = difficultyOrder[next] || 2;
+
+        if (nextLevel > prevLevel) {
+          showToast('Poziom trudności wzrósł!', '⬆️', 'levelUp', 2000);
+        } else if (nextLevel < prevLevel) {
+          showToast('Poziom trudności zmalał', '⬇️', 'levelUp', 2000);
+        } else {
+          showToast('Zmieniono poziom trudności', '⚖️', 'levelUp', 2000);
+        }
+      }
 
       if (response.quiz_completed) {
         setTimeout(() => navigate(`/quiz/details/${sessionId}`), 3000);

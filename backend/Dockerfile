@@ -23,8 +23,13 @@ ENV TRANSFORMERS_CACHE=/opt/models/huggingface \
     SENTENCE_TRANSFORMERS_HOME=/opt/models/sentence-transformers \
     HF_HOME=/opt/models/huggingface
 
+ARG PRELOAD_MODELS=0
 RUN mkdir -p /opt/models/huggingface /opt/models/sentence-transformers && \
-    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
+    if [ "$PRELOAD_MODELS" = "1" ]; then \
+      python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"; \
+    else \
+      echo "Skipping model preload during image build"; \
+    fi
 
 # Stage 2: Runtime
 FROM python:3.11-slim

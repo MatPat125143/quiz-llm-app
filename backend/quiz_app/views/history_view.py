@@ -1,5 +1,7 @@
 import logging
 
+from django.db.models import FloatField, Sum, Value
+from django.db.models.functions import Coalesce
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -22,7 +24,16 @@ logger = logging.getLogger(__name__)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def quiz_history(request):
-    qs = QuizSession.objects.filter(user=request.user, is_completed=True)
+    qs = (
+        QuizSession.objects.filter(user=request.user, is_completed=True)
+        .annotate(
+            total_response_time=Coalesce(
+                Sum('answers__response_time'),
+                Value(0.0),
+                output_field=FloatField()
+            )
+        )
+    )
 
     topic = request.GET.get('topic')
     difficulty = request.GET.get('difficulty')

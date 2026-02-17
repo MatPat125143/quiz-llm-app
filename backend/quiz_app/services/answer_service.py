@@ -47,6 +47,8 @@ def handle_adaptive_difficulty_change(session, difficulty_adapter, bg_generator)
         new_difficulty_level
     )
 
+    QuizCacheService.clear_session_cache(session.id)
+
     answered_question_ids = list(
         Answer.objects.filter(session=session).values_list('question_id', flat=True)
     )
