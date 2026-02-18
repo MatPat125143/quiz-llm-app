@@ -39,3 +39,5 @@ logs/
 .cache/
 tmp/
 temp/
+backend/static/
+backend/media/
