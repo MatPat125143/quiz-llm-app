@@ -26,7 +26,7 @@ export default function UserDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const quizData = await getQuizHistory({ limit: 5 });
+      const quizData = await getQuizHistory({ page: 1, page_size: 3 });
       setQuizzes(quizData.results || []);
     } catch (err) {
       console.error('Error loading dashboard:', err);

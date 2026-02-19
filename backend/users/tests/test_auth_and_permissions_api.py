@@ -59,13 +59,14 @@ class AuthAndPermissionsApiTests(APITestCase):
             PasswordResetToken.objects.filter(user=self.user, used=False).exists()
         )
 
-    def test_password_reset_request_for_unknown_email_returns_generic_success(self):
+    def test_password_reset_request_for_unknown_email_returns_not_found(self):
         response = self.client.post(
             '/api/users/password-reset/request/',
             {'email': 'not-found@example.com'},
             format='json'
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('error', response.data)
 
     def test_verify_and_confirm_password_reset_flow(self):
         token = PasswordResetToken.objects.create(user=self.user, code='123456')

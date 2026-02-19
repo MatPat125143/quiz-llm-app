@@ -15,6 +15,10 @@ const redirectToServerErrorIfNeeded = (status) => {
   }
 };
 
+const isAuthTokenEndpoint = (url = '') => {
+  return url.includes('/auth/jwt/create/') || url.includes('/auth/jwt/refresh/');
+};
+
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
@@ -30,8 +34,13 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const requestUrl = originalRequest?.url || '';
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && isAuthTokenEndpoint(requestUrl)) {
+      return Promise.reject(error);
+    }
+
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {

@@ -40,7 +40,7 @@ export default function ForgotPassword() {
             }, 2000);
         } catch (err) {
             console.error('Request reset error:', err);
-            setError('Nie udało się wysłać kodu. Spróbuj ponownie.');
+            setError(err.response?.data?.error || 'Nie udało się wysłać kodu. Spróbuj ponownie.');
         } finally {
             setLoading(false);
         }

@@ -21,7 +21,7 @@ export default function Login() {
             navigate('/dashboard', { replace: true });
         } catch (err) {
             console.error('Login error:', err);
-            setError('Nieprawidłowy email lub hasło');
+            setError('Nieprawidłowy e-mail lub hasło');
         } finally {
             setLoading(false);
         }
@@ -56,7 +56,7 @@ export default function Login() {
                 <form onSubmit={handleSubmit}>
                     <div className="mb-4">
                         <label className="block text-gray-700 dark:text-slate-200 font-semibold mb-2">
-                            Adres email
+                            Adres e-mail
                         </label>
                         <input
                             type="email"

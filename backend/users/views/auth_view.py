@@ -39,8 +39,8 @@ def request_password_reset(request):
 
     except User.DoesNotExist:
         return Response({
-            'message': 'If an account with that email exists, a reset code has been sent'
-        })
+            'error': 'Nie istnieje konto przypisane do podanego adresu e-mail.'
+        }, status=status.HTTP_404_NOT_FOUND)
     except (DatabaseError, RuntimeError, TypeError, ValueError) as e:
         logger.error(f"Error in password reset request: {e}")
         return Response({
