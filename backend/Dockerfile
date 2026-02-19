@@ -1,4 +1,3 @@
-# Stage 1: Builder
 FROM python:3.11-slim as builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -18,7 +17,6 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# ✅ Pobierz modele podczas buildu
 ENV TRANSFORMERS_CACHE=/opt/models/huggingface \
     SENTENCE_TRANSFORMERS_HOME=/opt/models/sentence-transformers \
     HF_HOME=/opt/models/huggingface
@@ -31,7 +29,6 @@ RUN mkdir -p /opt/models/huggingface /opt/models/sentence-transformers && \
       echo "Skipping model preload during image build"; \
     fi
 
-# Stage 2: Runtime
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -53,7 +50,6 @@ ENV PATH="/opt/venv/bin:$PATH" \
 WORKDIR /app
 COPY . .
 
-# Usuń przypadkowo skopiowane .venv i cache
 RUN rm -rf .venv venv env 2>/dev/null || true && \
     find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
     find . -type f -name "*.pyc" -delete 2>/dev/null || true

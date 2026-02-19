@@ -10,7 +10,7 @@ class EmailService:
 
     def __init__(self):
         self.from_email = os.getenv('DEFAULT_FROM_EMAIL', 'quiz-llm-app@wp.pl')
-        self.from_name = os.getenv('MAILJET_FROM_NAME', 'Quiz LLM App')
+        self.from_name = os.getenv('EMAIL_FROM_NAME', 'Quiz LLM App')
 
     def send_password_reset_email(self, recipient_email, reset_code):
         subject = "Kod resetowania hasła - Quiz LLM App"
