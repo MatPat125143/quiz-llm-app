@@ -1,0 +1,32 @@
+﻿INSTRUKCJA URUCHOMIENIA PROJEKTU (Windows, PowerShell)
+1. Wymagania:
+- Docker Desktop (uruchomiony)
+- Node.js 20+
+- npm
+2. Przejdz do katalogu projektu:
+cd D:\quiz-llm-app
+3. Przygotuj konfiguracje srodowiska:
+copy .env.example .env
+Nastepnie uzupelnij w .env:
+- OPENAI_API_KEY
+- dane SMTP (EMAIL_HOST_USER, EMAIL_HOST_PASSWORD), jesli chcesz reset hasla e-mailem
+4. Uruchom backend + baze + redis:
+docker compose up -d --build
+5. Uruchom frontend:
+cd frontend
+npm ci
+npm run dev
+6. Otworz aplikacje:
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000/api
+- Panel admina Django: http://localhost:8000/admin
+7. (Opcjonalnie) Utworz konto administratora:
+cd ..\backend
+docker compose exec backend python manage.py createsuperuser
+Komendy pomocnicze:
+- Logi backendu:
+docker compose logs -f backend
+- Zatrzymanie srodowiska:
+docker compose down
+- Reset danych (usunie volumes):
+docker compose down -v

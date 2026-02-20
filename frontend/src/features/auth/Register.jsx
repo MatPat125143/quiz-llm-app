@@ -131,7 +131,7 @@ export default function Register() {
 
     if (success) {
         return (
-            <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-green-500 to-blue-600 p-4 pt-16 sm:pt-4">
+            <div className="relative min-h-[125dvh] flex items-center justify-center bg-gradient-to-br from-green-500 to-blue-600 p-4 pt-16 sm:pt-4 overflow-y-auto">
                 <button
                 type="button"
                 onClick={toggleTheme}
@@ -152,7 +152,7 @@ export default function Register() {
     }
 
     return (
-        <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-500 to-pink-600 p-4 pt-16 sm:pt-4">
+        <div className="relative min-h-[125dvh] flex items-center justify-center bg-gradient-to-br from-purple-500 to-pink-600 p-4 pt-16 sm:pt-4 overflow-y-auto">
             <button
                 type="button"
                 onClick={toggleTheme}

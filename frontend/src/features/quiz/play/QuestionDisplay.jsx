@@ -32,7 +32,7 @@ const QUESTION_TOAST_STYLES = `
 function QuestionLoader({ title = 'Przygotowuję quiz...', subtitle }) {
   return (
     <MainLayout hideChrome>
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
+      <div className="h-[125dvh] flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
         <div className="bg-white p-10 sm:p-12 rounded-2xl shadow-2xl text-center max-w-md w-full">
           <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-indigo-600 mx-auto mb-6" />
           <h2 className="text-2xl font-bold text-gray-800 mb-3">{title}</h2>
@@ -387,7 +387,7 @@ export default function QuestionDisplay() {
   if (loading && !question) {
     return (
       <MainLayout user={user} hideChrome>
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
+        <div className="h-[125dvh] flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
           <div className="bg-white p-12 rounded-2xl shadow-2xl text-center max-w-md">
             <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-indigo-600 mx-auto mb-6"></div>
             <h2 className="text-2xl font-bold text-gray-800 mb-3">Generuję pytanie...</h2>
@@ -401,7 +401,7 @@ export default function QuestionDisplay() {
   if (error && !question) {
     return (
       <MainLayout user={user} hideChrome>
-        <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="h-[125dvh] flex items-center justify-center bg-gray-100">
           <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-md">
             <div className="text-6xl mb-4">😕</div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Ups! Coś poszło nie tak</h2>
@@ -438,9 +438,9 @@ export default function QuestionDisplay() {
       <style>{QUESTION_TOAST_STYLES}</style>
       <QuestionToaster toast={activeToast} onDone={handleToastDone} />
 
-      <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
-        <div className="max-w-4xl mx-auto py-2 sm:py-8">
-          <div className="bg-white rounded-2xl shadow-lg overflow-hidden h-[calc(100dvh-2rem)] sm:h-[86vh] flex flex-col pb-6">
+      <div className="h-[125dvh] bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-2 sm:p-4 overflow-hidden">
+        <div className="max-w-4xl mx-auto h-full py-2 sm:py-8">
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden w-full h-[calc(100%-1rem)] sm:h-[calc(100%-4rem)] flex flex-col">
             <div className="p-4 sm:p-6 pb-5 flex-shrink-0">
               <div className="flex justify-between items-start gap-4">
                 <div className="flex flex-col gap-1">
@@ -474,7 +474,7 @@ export default function QuestionDisplay() {
               </div>
             </div>
 
-            <div className="px-4 sm:px-8 flex-1 overflow-y-auto">
+            <div className="px-4 sm:px-8 flex-1 min-h-0 overflow-y-auto">
               <div className="flex flex-col gap-6 pb-6">
                 <h3 className="text-2xl font-bold text-gray-800">
                   <LatexRenderer text={question.question_text} />
@@ -513,7 +513,7 @@ export default function QuestionDisplay() {
               </div>
             </div>
 
-            <div className="px-4 sm:px-8 pt-6 pb-6 flex-shrink-0 border-t border-gray-100">
+            <div className="px-4 sm:px-8 pt-4 pb-4 sm:pt-6 sm:pb-6 flex-shrink-0 border-t border-gray-100">
               {!result ? (
                 <button
                   onClick={() => handleSubmit()}

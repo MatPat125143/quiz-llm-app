@@ -1,0 +1,598 @@
+﻿OPIS STRUKTURY PROJEKTU (stan aktualny repozytorium)
+Projekt: quiz-llm-app
+
+==================================================
+1) STRUKTURA GŁÓWNA REPOZYTORIUM
+==================================================
+
+quiz-llm-app/
+|-- .env
+|-- .env.example
+|-- .gitignore
+|-- docker-compose.yml
+|-- backend/
+|-- frontend/
+|-- .idea/            [lokalne pliki IDE]
+|-- .venv/            [lokalne środowisko Python]
+
+Opis:
+- backend/ - aplikacja serwerowa Django + DRF + logika quizu i integracja z LLM.
+- frontend/ - aplikacja kliencka React + Vite + Tailwind.
+- docker-compose.yml - uruchamianie środowiska (PostgreSQL + Redis + backend).
+- .env / .env.example - konfiguracja środowiskowa.
+- .idea i .venv - artefakty lokalne środowiska deweloperskiego, nie są częścią logiki biznesowej.
+
+
+==================================================
+2) BACKEND - STRUKTURA I ODPOWIEDZIALNOŚCI
+==================================================
+
+backend/
+|-- Dockerfile
+|-- manage.py
+|-- requirements.txt
+|-- cache_manager/
+|   |-- __init__.py
+|   |-- cache_service.py
+|-- llm_integration/
+|   |-- __init__.py
+|   |-- config.py
+|   |-- difficulty_adapter.py
+|   |-- embeddings_service.py
+|   |-- prompts.py
+|   |-- question_generator.py
+|   `-- tests/
+|       |-- __init__.py
+|       |-- test_difficulty_adapter.py
+|       `-- test_question_generator_validation.py
+|-- performance/
+|   `-- k6/
+|       |-- quiz_flow_load.js
+|       `-- read_api_load.js
+|-- quiz_project/
+|   |-- __init__.py
+|   |-- asgi.py
+|   |-- settings.py
+|   |-- urls.py
+|   `-- wsgi.py
+|-- quiz_app/
+|   |-- __init__.py
+|   |-- apps.py
+|   |-- models.py
+|   |-- permissions.py
+|   |-- urls.py
+|   |-- admin/
+|   |   |-- __init__.py
+|   |   |-- answer_admin.py
+|   |   |-- filters.py
+|   |   |-- inlines.py
+|   |   |-- question_admin.py
+|   |   `-- quiz_session_admin.py
+|   |-- management/
+|   |   |-- __init__.py
+|   |   `-- commands/
+|   |       |-- __init__.py
+|   |       |-- cleanup_abandoned_sessions.py
+|   |       `-- cleanup_orphaned_questions.py
+|   |-- migrations/
+|   |   |-- __init__.py
+|   |   `-- 0001_initial.py
+|   |-- serializers/
+|   |   |-- __init__.py
+|   |   |-- answer_serializer.py
+|   |   |-- question_serializer.py
+|   |   `-- quiz_serializer.py
+|   |-- services/
+|   |   |-- __init__.py
+|   |   |-- answer_service.py
+|   |   |-- background_generation_service.py
+|   |   |-- cleanup_service.py
+|   |   |-- history_service.py
+|   |   |-- leaderboard_service.py
+|   |   |-- question_delivery_service.py
+|   |   |-- question_generation_service.py
+|   |   `-- question_service.py
+|   |-- tests/
+|   |   |-- __init__.py
+|   |   |-- test_adaptive_difficulty.py
+|   |   |-- test_admin_questions_api.py
+|   |   |-- test_migrations_regression.py
+|   |   |-- test_quiz_flow_api.py
+|   |   `-- test_scoring_and_stats.py
+|   |-- utils/
+|   |   |-- __init__.py
+|   |   |-- constants.py
+|   |   |-- deduplicator.py
+|   |   |-- helpers.py
+|   |   `-- pagination.py
+|   `-- views/
+|       |-- __init__.py
+|       |-- admin_questions_view.py
+|       |-- answer_view.py
+|       |-- history_view.py
+|       |-- leaderboard_view.py
+|       |-- question_view.py
+|       `-- quiz_view.py
+`-- users/
+    |-- __init__.py
+    |-- apps.py
+    |-- models.py
+    |-- permissions.py
+    |-- signals.py
+    |-- urls.py
+    |-- admin/
+    |   |-- __init__.py
+    |   |-- inlines.py
+    |   |-- password_reset_token_admin.py
+    |   |-- profile_admin.py
+    |   `-- user_admin.py
+    |-- migrations/
+    |   |-- __init__.py
+    |   `-- 0001_initial.py
+    |-- serializers/
+    |   |-- __init__.py
+    |   |-- profile_serializer.py
+    |   `-- user_serializer.py
+    |-- services/
+    |   |-- __init__.py
+    |   |-- auth_service.py
+    |   |-- email_service.py
+    |   `-- user_service.py
+    |-- tests/
+    |   |-- __init__.py
+    |   |-- test_admin_sessions_api.py
+    |   |-- test_auth_and_permissions_api.py
+    |   `-- test_avatar_cleanup_api.py
+    |-- utils/
+    |   |-- __init__.py
+    |   `-- constants.py
+    `-- views/
+        |-- __init__.py
+        |-- admin_view.py
+        |-- auth_view.py
+        `-- profile_view.py
+
+
+2.1) Pliki backendowe krytyczne (konfiguracja i uruchomienie)
+- backend/manage.py
+  Punkt wejścia do komend Django (runserver, testy, migracje, shell).
+
+- backend/quiz_project/settings.py
+  Główna konfiguracja backendu:
+  - baza: PostgreSQL,
+  - cache: Redis (django-redis),
+  - auth: JWT (SimpleJWT),
+  - DRF, Djoser, CORS,
+  - email SMTP,
+  - media/static.
+
+- backend/quiz_project/urls.py
+  Główny routing:
+  - /admin/
+  - /api/auth/ (Djoser + JWT)
+  - /api/users/
+  - /api/quiz/
+
+- backend/requirements.txt
+  Zależności backendu (Django, DRF, JWT, Redis, OpenAI, transformers, sentence-transformers, itp.).
+
+- backend/Dockerfile
+  Obraz backendu (multi-stage), instalacja zależności, opcjonalny preload modelu embeddingowego, runtime na porcie 8000.
+
+
+2.2) Główne aplikacje Django
+
+A) users/ (tożsamość, profil, admin users)
+- users/models.py
+  - User (custom user, login po emailu),
+  - UserProfile (rola, avatar, statystyki globalne gracza, domyślny poziom wiedzy),
+  - PasswordResetToken (kod resetu hasła).
+
+- users/views/auth_view.py
+  Obsługa resetu hasła:
+  - request_password_reset,
+  - verify_reset_code,
+  - reset_password_with_code.
+
+- users/views/profile_view.py
+  Operacje gracza na koncie:
+  - pobranie danych, aktualizacja profilu,
+  - zmiana hasła,
+  - upload/usunięcie avatara,
+  - ustawienia,
+  - usunięcie konta.
+
+- users/views/admin_view.py
+  Endpointy administracyjne użytkowników i sesji:
+  - dashboard admina,
+  - listowanie/szukanie użytkowników,
+  - historia quizów wybranego użytkownika,
+  - usuwanie użytkownika,
+  - przełączanie aktywności,
+  - zmiana roli,
+  - usuwanie sesji quizu.
+
+- users/services/
+  - auth_service.py: logika resetu haseł,
+  - email_service.py: wysyłka maili (reset/welcome),
+  - user_service.py: operacje pomocnicze na profilu/użytkowniku.
+
+- users/signals.py
+  Sygnały Django związane z profilem i cleanupem avatara.
+
+B) quiz_app/ (rdzeń domeny quizu)
+- quiz_app/models.py
+  Kluczowe modele:
+  - QuizSession (parametry i stan sesji quizu),
+  - Question (bank pytań, metadane, statystyki, hash treści),
+  - QuizSessionQuestion (powiązanie pytanie-sesja + kolejność),
+  - Answer (udzielone odpowiedzi + czas + poprawność).
+
+- quiz_app/views/quiz_view.py
+  Cykl życia quizu:
+  - start_quiz,
+  - end_quiz,
+  - cancel_quiz.
+
+- quiz_app/views/question_view.py
+  - get_question (pobranie kolejnego pytania dla sesji),
+  - questions_library (biblioteka pytań użytkownika).
+
+- quiz_app/views/answer_view.py
+  submit_answer: zapis odpowiedzi, aktualizacja statystyk, adaptacja trudności, prefetch.
+
+- quiz_app/views/history_view.py
+  - quiz_history,
+  - quiz_details,
+  - quiz_api_root.
+
+- quiz_app/views/leaderboard_view.py
+  - global_leaderboard,
+  - topic_leaderboard,
+  - user_ranking,
+  - leaderboard_stats.
+
+- quiz_app/views/admin_questions_view.py
+  CRUD administracyjny pytań:
+  - list/questions, detail, update, delete, stats.
+
+
+2.3) Warstwa usług (quiz_app/services)
+- question_generation_service.py
+  Orkiestruje generację danych pytań i dodawanie do sesji.
+
+- background_generation_service.py
+  Sync/async generacja pytań (startowa i adaptacyjna), batching, kontrola limitów.
+
+- question_delivery_service.py
+  Logika pobierania następnego pytania, fallback generacji, czekanie na pytanie, pre-generacja kolejnego poziomu.
+
+- question_service.py
+  Deduplikacja pytań:
+  - hash contentu,
+  - wyszukiwanie podobieństwa semantycznego,
+  - dodanie pytania do sesji z kontrolą duplikatów.
+
+- answer_service.py
+  Adaptacja trudności po odpowiedzi:
+  - zmiana poziomu,
+  - sprzątanie pytań starego poziomu,
+  - harmonogram dogenerowania pytań,
+  - aktualizacja statystyk profilu,
+  - prefetch pytania do cache.
+
+- cleanup_service.py
+  Cleanup pytań osieroconych/odrzuconych i rollback sesji.
+
+- history_service.py
+  Budowa payloadu szczegółów sesji quizu.
+
+- leaderboard_service.py
+  Agregacja rankingów globalnych/tematycznych i statystyk.
+
+
+2.4) Integracja z LLM (llm_integration)
+- config.py
+  Konfiguracja modeli/parametrów OpenAI i embeddings.
+
+- prompts.py
+  Szablony promptów do generowania pytań.
+
+- question_generator.py
+  Główny generator pytań AI:
+  - generowanie pojedyncze i wielokrotne,
+  - czyszczenie/parsing JSON,
+  - walidacje jakości pytań,
+  - fallbacki, gdy model zwróci niepoprawne dane.
+
+- difficulty_adapter.py
+  Algorytm adaptacyjnej trudności:
+  - mapowanie poziomów,
+  - podnoszenie/obniżanie trudności,
+  - wykrywanie zmiany poziomu,
+  - pre-generacja pytań na przewidywany kolejny poziom.
+
+- embeddings_service.py
+  Kodowanie pytań do embeddingów i dostępność modelu.
+
+
+2.5) Endpointy backendu (mapa API)
+- auth (djoser + jwt):
+  /api/auth/...
+- users:
+  /api/users/me/
+  /api/users/update/
+  /api/users/settings/
+  /api/users/delete/
+  /api/users/change-password/
+  /api/users/avatar/upload/
+  /api/users/avatar/delete/
+  /api/users/password-reset/request/
+  /api/users/password-reset/verify/
+  /api/users/password-reset/confirm/
+  /api/users/admin/dashboard/
+  /api/users/admin/users/
+  /api/users/admin/users/search/
+  /api/users/admin/users/<id>/quizzes/
+  /api/users/admin/users/<id>/delete/
+  /api/users/admin/users/<id>/role/
+  /api/users/admin/users/<id>/toggle/
+  /api/users/admin/sessions/<id>/delete/
+
+- quiz:
+  /api/quiz/start/
+  /api/quiz/question/<session_id>/
+  /api/quiz/answer/
+  /api/quiz/end/<session_id>/
+  /api/quiz/cancel/<session_id>/
+  /api/quiz/history/
+  /api/quiz/details/<session_id>/
+  /api/quiz/questions/
+  /api/quiz/leaderboard/global/
+  /api/quiz/leaderboard/topic/
+  /api/quiz/leaderboard/me/
+  /api/quiz/leaderboard/stats/
+  /api/quiz/admin/questions/
+  /api/quiz/admin/questions/stats/
+  /api/quiz/admin/questions/<id>/
+  /api/quiz/admin/questions/<id>/update/
+  /api/quiz/admin/questions/<id>/delete/
+
+
+2.6) Testy backendu
+- users/tests/
+  - autoryzacja, uprawnienia, reset hasła,
+  - admin sessions API,
+  - avatar upload/delete + cleanup.
+
+- quiz_app/tests/
+  - przepływ quizu,
+  - scoring/statystyki,
+  - adaptacyjna trudność,
+  - admin pytań,
+  - regresja migracji.
+
+- llm_integration/tests/
+  - difficulty adapter,
+  - walidacja generatora pytań.
+
+- performance/k6/
+  skrypty testów wydajnościowych:
+  - read_api_load.js,
+  - quiz_flow_load.js.
+
+
+==================================================
+3) FRONTEND - STRUKTURA I ODPOWIEDZIALNOŚCI
+==================================================
+
+frontend/
+|-- Dockerfile
+|-- index.html
+|-- package.json
+|-- package-lock.json
+|-- eslint.config.js
+|-- postcss.config.js
+|-- tailwind.config.js
+|-- vite.config.js
+|-- public/
+|   `-- vite.svg
+`-- src/
+    |-- main.jsx
+    |-- App.jsx
+    |-- styles/
+    |   `-- index.css
+    |-- routes/
+    |   `-- AppRouter.jsx
+    |-- layouts/
+    |   `-- MainLayout.jsx
+    |-- hooks/
+    |   |-- useCurrentUser.js
+    |   `-- useThemeToggle.js
+    |-- services/
+    |   |-- apiClient.js
+    |   |-- api.js
+    |   |-- constants.js
+    |   |-- helpers.js
+    |   `-- theme.js
+    |-- components/
+    |   |-- EmptyState.jsx
+    |   |-- ErrorBoundary.jsx
+    |   |-- FiltersPanel.jsx
+    |   |-- LatexRenderer.jsx
+    |   |-- LoadingState.jsx
+    |   |-- PaginationBar.jsx
+    |   `-- ProtectedRoute.jsx
+    |-- pages/
+    |   `-- errors/
+    |       |-- Forbidden.jsx
+    |       |-- NotFound.jsx
+    |       `-- ServerError.jsx
+    `-- features/
+        |-- auth/
+        |   |-- Login.jsx
+        |   |-- Register.jsx
+        |   `-- ForgotPassword.jsx
+        |-- user/
+        |   |-- UserDashboard.jsx
+        |   |-- UserProfile.jsx
+        |   `-- profile/
+        |       |-- ProfileDataSection.jsx
+        |       `-- ProfileSettingsSection.jsx
+        |-- quiz/
+        |   |-- QuizSetup.jsx
+        |   |-- QuizHistory.jsx
+        |   |-- QuizDetails.jsx
+        |   `-- play/
+        |       |-- QuestionDisplay.jsx
+        |       |-- QuestionTimer.jsx
+        |       `-- QuestionToasts.jsx
+        |-- library/
+        |   `-- QuestionsLibrary.jsx
+        |-- leaderboard/
+        |   `-- Leaderboard.jsx
+        `-- admin/
+            |-- AdminPanel.jsx
+            |-- QuestionsManager.jsx
+            |-- users/
+            |   |-- AdminUsersSection.jsx
+            |   `-- AdminUserQuizHistoryModal.jsx
+            `-- questions/
+                |-- QuestionsFilters.jsx
+                `-- QuestionEditModal.jsx
+
+
+3.1) Frontend - pliki startowe i routing
+- src/main.jsx
+  Bootstrap aplikacji React, inicjalne zastosowanie motywu.
+
+- src/App.jsx
+  Opakowanie routera w ErrorBoundary.
+
+- src/routes/AppRouter.jsx
+  Definicja wszystkich tras aplikacji:
+  - publiczne: login/register/forgot,
+  - chronione: dashboard/profile/quiz/.../admin,
+  - strony błędów: 403/404/500.
+
+- src/components/ProtectedRoute.jsx
+  Brama autoryzacji oparta o token JWT i jego datę ważności.
+
+
+3.2) Frontend - warstwa API i utils
+- src/services/apiClient.js
+  Klient Axios:
+  - base URL,
+  - interceptor request (Authorization Bearer),
+  - interceptor response (refresh token),
+  - przekierowanie na /500 przy błędach 5xx.
+
+- src/services/api.js
+  Zbiór funkcji mapujących 1:1 endpointy backendu (auth/users/quiz/admin).
+
+- src/services/constants.js
+  Stałe domenowe: poziomy wiedzy, trudności, tematy/podtematy, wartości domyślne quizu.
+
+- src/services/helpers.js
+  Formatowanie i mapowania etykiet/badge (data, czas, procenty, poziomy).
+
+- src/services/theme.js
+  Obsługa motywu (localStorage + klasę root + event themechange).
+
+
+3.3) Frontend - moduły funkcjonalne (features)
+- auth/
+  Logowanie, rejestracja, reset hasła.
+
+- user/
+  Dashboard użytkownika i profil (sekcje danych i ustawień).
+
+- quiz/
+  Konfiguracja quizu, historia sesji, szczegóły, rozgrywka.
+  Podfolder play/ zawiera komponenty stricte runtime pytania (timer, toasty, ekran pytania).
+
+- library/
+  Biblioteka pytań z filtracją i paginacją.
+
+- leaderboard/
+  Ranking globalny i statystyki pozycji użytkownika.
+
+- admin/
+  Panel administratora z podziałem na:
+  - użytkowników (lista + modal historii),
+  - pytania (lista, filtry, modal edycji),
+  - nadrzędny kontener AdminPanel.
+
+
+3.4) Frontend - komponenty współdzielone
+- FiltersPanel.jsx
+  Ujednolicona sekcja filtrów (zwijana/rozwijana).
+
+- PaginationBar.jsx
+  Wspólny pasek paginacji.
+
+- LoadingState.jsx / EmptyState.jsx
+  Ujednolicone stany ładowania i pustych wyników.
+
+- LatexRenderer.jsx
+  Render treści matematycznych (KaTeX).
+
+- ErrorBoundary.jsx
+  Fallback UI przy błędach runtime React.
+
+- pages/errors/*.jsx
+  Dedykowane strony błędów 403/404/500.
+
+
+==================================================
+4) INFRASTRUKTURA I URUCHOMIENIE
+==================================================
+
+- docker-compose.yml
+  Uruchamia:
+  - db: PostgreSQL,
+  - redis: Redis,
+  - backend: Django (migracje + runserver).
+
+- backend/Dockerfile
+  Buduje backend Python 3.11.
+
+- frontend/Dockerfile
+  Uruchamia frontend Vite dev server.
+
+
+==================================================
+5) NAJWAŻNIEJSZE CECHY ARCHITEKTONICZNE
+==================================================
+
+1. Backend ma podział na warstwy:
+   views -> services -> models/utils.
+
+2. Logika domenowa quizu nie jest upchnięta w widokach:
+   krytyczne operacje są wydzielone do services.
+
+3. Moduł llm_integration jest odseparowany od warstwy HTTP:
+   konfiguracja promptów, generator i adapter trudności są niezależne od DRF views.
+
+4. Frontend używa architektury feature-based:
+   kod ekranów jest grupowany po funkcjonalnościach (auth, quiz, admin, user, itp.).
+
+5. Części współdzielone są wydzielone:
+   hooks, components, services.
+
+6. W projekcie nie ma obecnie katalogu React Context (brak AuthContext/ThemeContext);
+   stan auth opiera się o JWT w localStorage + ProtectedRoute,
+   a motyw o service + hook useThemeToggle.
+
+
+==================================================
+6) PODSUMOWANIE PRAKTYCZNE DO DOKUMENTACJI
+==================================================
+
+Jeśli ten opis ma trafić do pracy dyplomowej, najbezpieczniejszy układ rozdziału to:
+- najpierw struktura wysokiego poziomu (backend/frontend/infrastruktura),
+- potem backend warstwowo (models/views/services/utils),
+- następnie frontend warstwowo (features/components/services/routes),
+- na końcu mapa endpointów i testów.
+
+Powyższy opis odpowiada aktualnemu stanowi plików w repozytorium.

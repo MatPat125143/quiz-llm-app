@@ -10,7 +10,7 @@ import {
   getKnowledgeBadgeClass,
   getKnowledgeBadgeLabel,
 } from '../../services/helpers';
-import { KNOWLEDGE_LEVELS, QUESTION_DIFFICULTY_LEVELS } from '../../services/constants';
+import { DIFFICULTY_LEVELS, KNOWLEDGE_LEVELS } from '../../services/constants';
 import MainLayout from '../../layouts/MainLayout';
 import FiltersPanel from '../../components/FiltersPanel';
 import PaginationBar from '../../components/PaginationBar';
@@ -35,6 +35,19 @@ export default function QuizHistory() {
   });
 
   const navigate = useNavigate();
+
+  const normalizeDifficulty = (value) => {
+    const raw = String(value || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    if (raw === 'latwy') return 'easy';
+    if (raw === 'sredni') return 'medium';
+    if (raw === 'trudny') return 'hard';
+    return raw;
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -64,7 +77,9 @@ export default function QuizHistory() {
     }
 
     if (filters.difficulty) {
-      filtered = filtered.filter((q) => q.difficulty === filters.difficulty);
+      filtered = filtered.filter(
+        (q) => normalizeDifficulty(q.difficulty) === normalizeDifficulty(filters.difficulty)
+      );
     }
 
     if (filters.knowledgeLevel) {
@@ -179,7 +194,7 @@ export default function QuizHistory() {
             <div className="md:col-span-4 mt-2">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Poziom trudności</label>
               <div className="flex flex-wrap gap-2">
-                {QUESTION_DIFFICULTY_LEVELS.map((opt) => {
+                {DIFFICULTY_LEVELS.map((opt) => {
                   const active = filters.difficulty === opt.key;
                   const base = getDifficultyBadgeClass(opt.key);
                   return (
